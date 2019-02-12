@@ -1620,7 +1620,7 @@ void Output_Color(uint32_t newColor){ // Set color of future output
  */
 
 void ST7735_Message (int device, int line, char *string, int32_t value) {
-	int y;
+	int y = 1;
 	switch (device) {
 	case (0) :  // row 0 - 7
 		if (line == 0) {
