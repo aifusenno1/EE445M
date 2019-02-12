@@ -7,17 +7,20 @@
 
 void DisableInterrupts(void); // Disable interrupts
 void EnableInterrupts(void);  // Enable interrupts
+long StartCritical (void);    // previous I bit, disable interrupts
+void EndCritical(long sr);    // restore I bit to previous value
 
 static void parse_lcd(char cmd[][20], int len);
+
+char input[200];
 
 void interpreter(void) {
 	while (1) {
 		Serial_OutString("Enter Command: ");
 
-		char input[100];
-		Serial_InString(input, 100);  // 200 will not work for some reason
+		Serial_InString(input, 200);  // 200 will not work for some reason
 
-		Serial_OutString("\n\r");
+		Serial_println("");
 		char *c = &input[0];
 
 		char command[10][20];
@@ -49,15 +52,12 @@ void interpreter(void) {
 		command[len++][i] = '\0';   // terminate the final token
 		command[len][0] = '\0';     // terminate the array with a NULL
 
-		int arg_len = len - 1;  // number of arguments (not including command)
-
-
-		// lcd output
-		if (!strcmp(command[0], "lcd")) {
-			ST7735_Message(0, 1, "MESSAGE", 0);
+//		 lcd output
+		if (strcmp(command[0], "lcd") == 0) {
 			parse_lcd(command, len);
+
 		}
-		// led
+//		 led
 		else {
 			Serial_println("Unrecognized command.");
 		}
@@ -72,12 +72,11 @@ void interpreter(void) {
 
 static void parse_lcd(char cmd[][20], int len) {
 //	Serial_OutUDec(len);
-
+	long sr = StartCritical();
 	if (len == 1) {
 		Serial_println("lcd: need at least an argument.");
 		return;
 	}
-	LED_RED_ON();
 
 	if (!strcmp(cmd[1], "message")) {
 		if (len < 5) {
@@ -104,4 +103,5 @@ static void parse_lcd(char cmd[][20], int len) {
 	else {
 		Serial_println("Unrecognized argument.");
 	}
+	EndCritical(sr);
 }

@@ -115,6 +115,6 @@ void Serial_OutUHex(uint32_t number);
 void Serial_InString(char *bufPt, uint16_t max);
 
 
-void Serial_println(char *pt);
+void Serial_println(char *format, ...);
 
 #endif

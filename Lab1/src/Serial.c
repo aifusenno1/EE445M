@@ -28,6 +28,7 @@
 // U0Rx (VCP receive) connected to PA0
 // U0Tx (VCP transmit) connected to PA1
 #include <stdint.h>
+#include <stdarg.h>
 #include "tm4c123gh6pm.h"
 
 #include "FIFO.h"
@@ -316,8 +317,43 @@ void Serial_InString(char *bufPt, uint16_t max) {
 }
 
 
-void Serial_println(char *pt){
-	Serial_OutString(pt);
+void Serial_println(char *format, ...) {
+	va_list ap;
+
+//	int num = 1;   // the number of %, aka data to be displayed
+//	if ((strtok(format_cp,"%")) == NULL) num = 0;
+//	while ((strtok(NULL,"%")) != NULL) num++;
+
+	va_start(ap, format);
+
+	while (*format != '\0') {
+		if (*format == '%') {
+			format++;
+			switch (*format) {
+			case 'u' :
+			case 'U' :
+				Serial_OutUDec(va_arg(ap, uint32_t));
+				break;
+			case 's' :
+			case 'S' :
+				Serial_OutString(va_arg(ap, char *));
+				break;
+			case 'c' :
+			case 'C' :
+				Serial_OutChar(va_arg(ap, int));
+				break;
+			case 'x' :
+			case 'X' :
+				Serial_OutUHex(va_arg(ap, uint32_t));
+				break;
+			}
+		}
+		else {
+			Serial_OutChar(*format);
+		}
+		format++;
+	}
+	va_end(ap);
 	Serial_OutChar(LF);
 	Serial_OutChar(CR);
 }

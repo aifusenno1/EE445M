@@ -1,30 +1,5 @@
 // Timer.c
-// Runs on LM4F120/TM4C123
-// Use Timer0A in periodic mode to request interrupts at a particular
-// period.
-// Daniel Valvano
-// September 11, 2013
 
-/* This example accompanies the book
-   "Embedded Systems: Introduction to ARM Cortex M Microcontrollers"
-   ISBN: 978-1469998749, Jonathan Valvano, copyright (c) 2015
-   Volume 1, Program 9.8
-
-  "Embedded Systems: Real Time Interfacing to ARM Cortex M Microcontrollers",
-   ISBN: 978-1463590154, Jonathan Valvano, copyright (c) 2014
-   Volume 2, Program 7.5, example 7.6
-
- Copyright 2015 by Jonathan W. Valvano, valvano@mail.utexas.edu
-    You may use, edit, run or distribute this file
-    as long as the above copyright notice remains
- THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
- OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
- MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
- VALVANO SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL,
- OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
- For more information about my classes, my research, and my books, see
- http://users.ece.utexas.edu/~valvano/
- */
 #include <stdint.h>
 #include "tm4c123gh6pm.h"
 #include "Timer.h"
@@ -39,9 +14,8 @@ void WaitForInterrupt(void);  // low power mode
 static void (*Task1)(void);   // user function
 static void (*Task2)(void);   // user function
 static void (*Task3)(void);   // user function
-static void (*Task0B)(void);   // user function
 
-
+// When concate TimerA and TimerB to use 32 bit, Timer A's control and status bits are used
 void Timer1A_Init(void(*task)(void), uint32_t period){
 	long sr = StartCritical();
 
@@ -101,58 +75,32 @@ void Timer2A_Init(void(*task)(void), uint32_t period){
  */
 void Timer3A_Init(void(*task)(void), uint32_t period){
 	long sr;
-  sr = StartCritical(); 
+	sr = StartCritical();
 	volatile uint32_t delay;
-SYSCTL_RCGCTIMER_R |= 0x08;   // 0) activate Timer3
+	SYSCTL_RCGCTIMER_R |= 0x08;   // 0) activate Timer3
 	delay = SYSCTL_RCGCTIMER_R;   // allow time to finish activating
 	Task3 = task;          // user function
-TIMER3_CTL_R = ~TIMER_CTL_TAEN;    // 1) disable TIMER3A during setup
+	TIMER3_CTL_R = ~TIMER_CTL_TAEN;    // 1) disable TIMER3A during setup
 	TIMER3_CFG_R = 0;    // 2) configure for 32-bit mode
 	TIMER3_TAPR_R = 0;            // 5) bus clock resolution
-TIMER3_TAMR_R = TIMER_TAMR_TAMR_PERIOD;   // 3) configure for periodic mode, default down-count settings
+	TIMER3_TAMR_R = TIMER_TAMR_TAMR_PERIOD;   // 3) configure for periodic mode, default down-count settings
 	TIMER3_TAILR_R = period - 1;    	// 4) reload value
 	TIMER3_IMR_R = TIMER_IMR_TATOIM;// arm timeout interrupt
 	TIMER3_ICR_R = TIMER_ICR_TATOCINT;    // 6) clear TIMER3A timeout flag
 	// Timer 3 interupts
-  NVIC_PRI8_R = (NVIC_PRI8_R&0x00FFFFFF); // clear priority
-NVIC_PRI8_R = (NVIC_PRI8_R | 0x80000000); // priority 4
-  NVIC_EN1_R = 1 << 3;              // enable interrupt 35 in NVIC
+	NVIC_PRI8_R = (NVIC_PRI8_R&0x00FFFFFF); // clear priority
+	NVIC_PRI8_R = (NVIC_PRI8_R | 0x80000000); // priority 4
+	NVIC_EN1_R = 1 << 3;              // enable interrupt 35 in NVIC
 	TIMER3_CTL_R = 0x00000001;    // 10) enable
-  EndCritical(sr);
-}
-
-void Timer0B_Init(void(*task)(void), uint32_t period){
-	long sr;
-  sr = StartCritical(); 
-	volatile uint32_t delay;
-	SYSCTL_RCGCTIMER_R |= 0x08;   // 0) activate Timer3
-	delay = SYSCTL_RCGCTIMER_R;   // allow time to finish activating
-	Task0B = task;          // user function
-TIMER0_CTL_R &= ~TIMER_CTL_TBEN;    // 1) disable TIMER3A during setup
-	TIMER0_CFG_R = 0;    // 2) configure for 32-bit mode
-	TIMER0_TBPR_R = 0;            // 5) bus clock resolution
-TIMER0_TBMR_R = 0x00000002;
-	TIMER0_TBILR_R = period - 1;    	// 4) reload value
-	TIMER0_IMR_R = TIMER_IMR_TBTOIM;// arm timeout interrupt
-	TIMER0_ICR_R = TIMER_ICR_TBTOCINT;    // 6) clear TIMER3A timeout flag
-	// Timer 3 interupts
-  NVIC_PRI5_R = (NVIC_PRI5_R&0xFFFFFF00); // clear priority
-NVIC_PRI5_R = (NVIC_PRI5_R | 0x00000080); // priority 4
-  NVIC_EN0_R = 1 << 20;              // enable interrupt 35 in NVIC
-	TIMER0_CTL_R |= TIMER_CTL_TBEN;    // 10) enable
-  EndCritical(sr);
+	EndCritical(sr);
 }
 
 
-void Timer0B_Handler(void){
-	TIMER0_ICR_R = TIMER_ICR_TBTOCINT; 
-  (*Task0B)();
-}
 
-void Timer1A_Handler(void){
-  Timer1A_Acknowledge();
-  (*Task1)();                // execute user task
-}
+//void Timer1A_Handler(void){
+//  Timer1A_Acknowledge();
+//  (*Task1)();                // execute user task
+//}
 
 void Timer2A_Handler(void){
   Timer2A_Acknowledge();
