@@ -1648,6 +1648,7 @@ void ST7735_Message (int device, int line, char *string, int32_t value) {
 	default	 :;
 	}
 
+	// need to fix this
 	if (*string) {  // print string
 		ST7735_DrawString(1, y, string, StTextColor);
 	}

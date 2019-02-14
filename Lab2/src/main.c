@@ -72,6 +72,7 @@ void PortE_Init(void){
   GPIO_PORTE_AMSEL_R &= ~0x0F;;      // disable analog functionality on PF
 }
 //------------------Task 1--------------------------------
+// CPU bound
 // 2 kHz sampling ADC channel 1, using software start trigger
 // background thread executed at 2 kHz
 // 60-Hz notch high-Q, IIR filter, assuming fs=2000 Hz
@@ -144,6 +145,7 @@ unsigned long input;
 //--------------end of Task 1-----------------------------
 
 //------------------Task 2--------------------------------
+// I/O bound? Fixed Bandwidth?
 // background thread executes with SW1 button
 // one foreground task created with button push
 // foreground treads run for 2 sec and die
@@ -191,6 +193,7 @@ void SW2Push(void){
 //--------------end of Task 2-----------------------------
 
 //------------------Task 3--------------------------------
+//  Fixed Bandwidth
 // hardware timer-triggered ADC sampling at 400Hz
 // Producer runs as part of ADC ISR
 // Producer uses fifo to transmit 400 samples/sec to Consumer
@@ -293,6 +296,7 @@ unsigned long myId = OS_Id();
 //--------------end of Task 4-----------------------------
 
 //------------------Task 5--------------------------------
+// I/O bound
 // UART background ISR performs serial input/output
 // Two software fifos are used to pass I/O data to foreground
 // The interpreter runs as a foreground thread
@@ -332,7 +336,7 @@ int realmain(void){
 #if Lab3
   OS_AddSW2Task(&SW2Push,2);  // add this line in Lab 3
 #endif
-  ADC_Init(4);  // sequencer 3, channel 4, PD3, sampling in DAS()
+  ADC_Open(4);  // sequencer 3, channel 4, PD3, sampling in DAS()
   OS_AddPeriodicThread(&DAS,PERIOD,1); // 2 kHz real time sampling of PD3
 
   NumCreated = 0 ;

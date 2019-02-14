@@ -7,14 +7,104 @@
 #include "tm4c123gh6pm.h"
 #include "LED.h"
 
-void DisableInterrupts(void); // Disable interrupts
-void EnableInterrupts(void);  // Enable interrupts
+void OS_DisableInterrupts(void); // Disable interrupts
+void OS_EnableInterrupts(void);  // Enable interrupts
 long StartCritical (void);    // previous I bit, disable interrupts
 void EndCritical(long sr);    // restore I bit to previous value
-void WaitForInterrupt(void);  // low power mode
+void StartOS(void);
 
 static void (*Task1)(void);   // user function
 static uint32_t counter1;
+
+
+
+#define NUMTHREADS  3        // maximum number of threads
+#define STACKSIZE   100      // number of 32-bit words in stack
+
+typedef struct tcb {
+	uint32_t *sp;
+	struct tcb *prev;
+	struct tcb *next;
+	int id;
+	uint32_t sleepCnt;
+//	int blocked;
+//	uint32_t priority;
+} tcbType;
+
+static tcbType tcbs[NUMTHREADS];
+static uint32_t threadCnt;
+static int nextID = 0;
+static tcbType *lastThread;
+static tcbType *RunPt;
+
+// ******** OS_Init ************
+// initialize operating system, disable interrupts until OS_Launch
+// initialize OS controlled I/O: systick, 80 MHz PLL
+// input:  none
+// output: none
+void OS_Init(void){
+  OS_DisableInterrupts();
+  PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
+  NVIC_ST_CTRL_R = 0;         // disable SysTick during setup
+  NVIC_ST_CURRENT_R = 0;      // any write to current clears it
+  NVIC_SYS_PRI3_R =(NVIC_SYS_PRI3_R&0x00FFFFFF)|0xE0000000; // priority 7
+}
+
+
+/* Currently, id is used to track the avaliability of a thread slot.
+ * Don't know if this will conflict with some other requirement later on
+ */
+static int findFreeThreadSlot(void) {
+	for (int i=0; i<NUMTHREADS; i++) {
+		if (tcbs[i].id == -1)
+			return i;
+	}
+	return -1;
+}
+//******** OS_AddThread ***************
+// add a foregound thread to the scheduler
+// Inputs: pointer to a void/void foreground task
+//         number of bytes allocated for its stack
+//         priority, 0 is highest, 5 is the lowest
+// Outputs: 1 if successful, 0 if this thread can not be added
+// stack size must be divisable by 8 (aligned to double word boundary)
+// In Lab 2, you can ignore both the stackSize and priority fields
+// In Lab 3, you can ignore the stackSize fields
+int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long priority) {
+	int32_t sr;
+	sr = StartCritical();
+
+	if (threadCnt == 0) {
+		tcbs[0].next = &tcbs[0];
+		tcbs[0].prev = &tcbs[0];
+		tcbs[0].id = nextID++;
+		tcbs[0].sleepCnt = 0;
+		lastThread = &tcbs[0];
+		RunPt = &tcbs[0];
+	}
+	else {
+		int slot = findFreeThreadSlot();
+		if (slot == -1) return 0;
+
+		// keeping both next and prev helps relinking when a thread dies
+		tcbs[slot].next = lastThread->next;
+		tcbs[slot].prev = lastThread;
+		lastThread->next->prev = &tcbs[slot];  // last thread's prev is the first thread
+		lastThread->next = &tcbs[slot];
+		lastThread = &tcbs[slot];
+
+		tcbs[slot].id = nextID++;
+		tcbs[slot].sleepCnt = 0;
+	}
+
+	threadCnt++;
+
+
+	EndCritical(sr);
+	return 1;
+}
+
+
 
 int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) {
 	long sr = StartCritical();
