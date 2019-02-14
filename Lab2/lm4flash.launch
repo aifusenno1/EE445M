@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<launchConfiguration type="org.eclipse.ui.externaltools.ProgramLaunchConfigurationType">
-<stringAttribute key="org.eclipse.ui.externaltools.ATTR_LOCATION" value="/Users/aifusenno1/Developer/TM4C/tools/lm4tools/lm4flash/lm4flash"/>
-<stringAttribute key="org.eclipse.ui.externaltools.ATTR_TOOL_ARGUMENTS" value="${project_name}.bin"/>
-<stringAttribute key="org.eclipse.ui.externaltools.ATTR_WORKING_DIRECTORY" value="${workspace_loc}/${project_name}/Debug"/>
-</launchConfiguration>

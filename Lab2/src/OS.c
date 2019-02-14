@@ -26,7 +26,7 @@ typedef struct tcb {
 	struct tcb *prev;
 	struct tcb *next;
 	int id;
-	uint32_t sleepCnt;
+	uint32_t sleep;
 //	int blocked;
 //	uint32_t priority;
 } tcbType;
