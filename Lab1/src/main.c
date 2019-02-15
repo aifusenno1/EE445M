@@ -21,11 +21,10 @@ int main(void) {
     ST7735_InitR(INITR_REDTAB);
 
     ST7735_FillScreen(ST7735_BLACK);            // set screen to white
-	ST7735_SetTextColor(ST7735_WHITE);
 
 	OS_AddPeriodicThread(dummy, 100000, 4);
 	SysTick_Wait10ms(10);
-	ST7735_Message(0,0, "", OS_ReadPeriodicTime());
+	ST7735_Message(0,0, "Time = ", OS_ReadPeriodicTime());
 	SysTick_Wait10ms(10);
 	Serial_println("%s %u", "The periodic time is ", OS_ReadPeriodicTime());
 

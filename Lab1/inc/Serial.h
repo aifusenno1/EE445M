@@ -115,6 +115,11 @@ void Serial_OutUHex(uint32_t number);
 void Serial_InString(char *bufPt, uint16_t max);
 
 
+//-----------Serial_println-------------
+// C stdio style println
+// automatically insrt the newline and carriage return at the end
+// input: format string and arguments
+// output: none
 void Serial_println(char *format, ...);
 
 #endif

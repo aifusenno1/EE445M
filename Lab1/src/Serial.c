@@ -317,13 +317,14 @@ void Serial_InString(char *bufPt, uint16_t max) {
 }
 
 
+
+//-----------Serial_println-------------
+// C stdio style println
+// automatically insrt the newline and carriage return at the end
+// input: format string and arguments
+// output: none
 void Serial_println(char *format, ...) {
 	va_list ap;
-
-//	int num = 1;   // the number of %, aka data to be displayed
-//	if ((strtok(format_cp,"%")) == NULL) num = 0;
-//	while ((strtok(NULL,"%")) != NULL) num++;
-
 	va_start(ap, format);
 
 	while (*format != '\0') {

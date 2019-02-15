@@ -14,6 +14,7 @@ static void parse_lcd(char cmd[][20], int len);
 
 char input[200];
 
+
 void interpreter(void) {
 	while (1) {
 		Serial_OutString("Enter Command: ");

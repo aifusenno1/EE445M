@@ -1,4 +1,9 @@
 // ADC.c
+// This module will be able to collect ADC data, but functionality of the functions may not match what is expected
+// Because the documentation is vague and conflicts with Lab2 starter codes
+// In Lab2, this module is redesigned.
+
+
 // adapted from ValvanoWare
 // Runs on LM4F120/TM4C123
 // Provide a function that initializes Timer0A to trigger ADC
@@ -7,21 +12,7 @@
 // Daniel Valvano
 // May 2, 2015
 
-/* This example accompanies the book
-   "Embedded Systems: Real Time Interfacing to Arm Cortex M Microcontrollers",
-   ISBN: 978-1463590154, Jonathan Valvano, copyright (c) 2015
 
- Copyright 2015 by Jonathan W. Valvano, valvano@mail.utexas.edu
-    You may use, edit, run or distribute this file
-    as long as the above copyright notice remains
- THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
- OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
- MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
- VALVANO SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL,
- OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
- For more information about my classes, my research, and my books, see
- http://users.ece.utexas.edu/~valvano/
- */
 
 // This initialization function sets up the ADC according to the
 // following parameters.  Any parameters not explicitly listed
@@ -92,10 +83,14 @@ void WaitForInterrupt(void);  // low power mode
 
 
 /*
+ * Open ADC0SS3 to collect 1 piece of data
  * ADC0
  * SS3
- * Timer2A interrupt
+ * Timer2A interrupt (one-shot mode)
  * 10000 Hz sampling rate on 80 MHz clock
+ * (This function does not match what is required by Lab 2, and will be redesigned)
+ * input: the channel number to open
+ * output: none
  */
 void ADC_Open(uint32_t channelNum) {
 	volatile uint32_t delay;
@@ -227,17 +222,33 @@ void ADC0Seq3_Handler(void){
   ADC0SS3_value = ADC0_SSFIFO3_R;  // 12-bit result
 }
 
-uint16_t ADC_In(void) {
-	return ADC0SS3_value & 0x0FFF;   // 12-bit result
-}
-
 
 /*
- * ADC0SS3
- * Timer2A
+ * read the previously recorded ADC value
+ * input:  none
+ * output: the previously read ADC value
  */
+uint16_t ADC_In(void) {
+	long sr = StartCritical();
+	uint16_t result = ADC0SS3_value & 0x0FFF;   // 12-bit result
+	EndCritical(sr);
+	return result;
+}
+
 static uint16_t ADC0SS2_buffer[100];
 static int buffer_size = 0;
+/*
+ * Open ADC0SS3 with the specified channelNum at interrupting frequency fs, take numberOfSamples of samples,
+ * store them in buffer, then disable the interrupt
+ * ADC0
+ * SS3
+ * Timer2A triggered
+ * (This function does not match what is required in Lab2. Will be redesigned.)
+ * inputs:  channelNum: the channel number to open
+ * 			fs: the interrupting frequency
+ * 			buffer: pointer to the array that stores data
+ * 			numberOfSamples: number of samples to collect
+ */
 void ADC_Collect(uint32_t channelNum, uint32_t fs, uint16_t buffer[], uint32_t numberOfSamples) {
 	volatile uint32_t delay;
 	// **** GPIO pin initialization ****

@@ -1615,10 +1615,14 @@ void Output_Color(uint32_t newColor){ // Set color of future output
 // ************** Self-created functions *************
 
 /*
- *  device: 0 for top screen, 1 for bottom screen
- *	line: 0 - 3
+ * Divide the LCD into two logical partitions and provide
+ * an interface to output a string and an integer
+ * inputs:	device: 0 for top screen, 1 for bottom screen
+ *			line: 0 - 3
+ *			string: the string to display
+ *			value: the value to display following the string
+ * output: none
  */
-
 void ST7735_Message (int device, int line, char *string, int32_t value) {
 	int y = 1;
 	switch (device) {
@@ -1648,11 +1652,8 @@ void ST7735_Message (int device, int line, char *string, int32_t value) {
 	default	 :;
 	}
 
-	if (*string) {  // print string
-		ST7735_DrawString(1, y, string, StTextColor);
-	}
-	else {  // print number
-		ST7735_SetCursor(10, y);
-		ST7735_OutUDec(value);
-	}
+
+	ST7735_SetCursor(1, y);
+	ST7735_OutString(string);
+	ST7735_OutUDec(value);
 }
