@@ -28,6 +28,9 @@
 #include "ST7735.h"
 #include "ADC.h"
 #include <string.h>
+#include "Serial.h"
+#include "LED.h"
+
 #define Lab2 1
 #define Lab3 0
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
@@ -336,7 +339,7 @@ int realmain(void){
 #if Lab3
   OS_AddSW2Task(&SW2Push,2);  // add this line in Lab 3
 #endif
-  ADC_Open(4);  // sequencer 3, channel 4, PD3, sampling in DAS()
+  ADC_Init(4);  // sequencer 3, channel 4, PD3, sampling in DAS()
   OS_AddPeriodicThread(&DAS,PERIOD,1); // 2 kHz real time sampling of PD3
 
   NumCreated = 0 ;
@@ -367,9 +370,11 @@ unsigned long Count3;   // number of times thread3 loops
 unsigned long Count4;   // number of times thread4 loops
 unsigned long Count5;   // number of times thread5 loops
 void Thread1(void){
+
   Count1 = 0;
   for(;;){
     PE0 ^= 0x01;       // heartbeat
+    LED_RED_TOGGLE();
     Count1++;
     OS_Suspend();      // cooperative multitasking
   }
@@ -378,6 +383,7 @@ void Thread2(void){
   Count2 = 0;
   for(;;){
     PE1 ^= 0x02;       // heartbeat
+    LED_BLUE_TOGGLE();
     Count2++;
     OS_Suspend();      // cooperative multitasking
   }
@@ -386,7 +392,7 @@ void Thread3(void){
   Count3 = 0;
   for(;;){
     PE2 ^= 0x04;       // heartbeat
-   // PE3 ^= 0x08;
+    LED_GREEN_TOGGLE();
     Count3++;
     OS_Suspend();      // cooperative multitasking
   }
@@ -395,10 +401,12 @@ void Thread3(void){
 int Testmain1(void){  // Testmain1
   OS_Init();          // initialize, disable interrupts
   PortE_Init();       // profile user threads
+  LED_Init();
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread1,128,1);
   NumCreated += OS_AddThread(&Thread2,128,2);
   NumCreated += OS_AddThread(&Thread3,128,3);
+
   // Count1 Count2 Count3 should be equal or off by one at all times
   OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
   return 0;            // this never executes
@@ -416,6 +424,7 @@ void Thread1b(void){
   Count1 = 0;
   for(;;){
     PE0 ^= 0x01;       // heartbeat
+    LED_RED_TOGGLE();
     Count1++;
   }
 }
@@ -423,6 +432,7 @@ void Thread2b(void){
   Count2 = 0;
   for(;;){
     PE1 ^= 0x02;       // heartbeat
+    LED_BLUE_TOGGLE();
     Count2++;
   }
 }
@@ -430,12 +440,15 @@ void Thread3b(void){
   Count3 = 0;
   for(;;){
     PE2 ^= 0x04;       // heartbeat
+    LED_GREEN_TOGGLE();
     Count3++;
   }
 }
 int main(void){  // Testmain2
   OS_Init();           // initialize, disable interrupts
   PortE_Init();       // profile user threads
+  LED_Init();
+
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread1b,128,1);
   NumCreated += OS_AddThread(&Thread2b,128,2);
@@ -649,10 +662,10 @@ void Thread6(void){  // foreground thread
 }
 extern void Jitter(void);   // prints jitter information (write this)
 void Thread7(void){  // foreground thread
-  UART_OutString("\n\rEE345M/EE380L, Lab 3 Preparation 2\n\r");
+  Serial_OutString("\n\rEE345M/EE380L, Lab 3 Preparation 2\n\r");
   OS_Sleep(5000);   // 10 seconds
   Jitter();         // print jitter information
-  UART_OutString("\n\r\n\r");
+  Serial_OutString("\n\r\n\r");
   OS_Kill();
 }
 #define workA 500       // {5,50,500 us} work in Task A
@@ -703,15 +716,15 @@ unsigned long WaitCount2;     // number of times s is successfully waited on
 unsigned long WaitCount3;     // number of times s is successfully waited on
 #define MAXCOUNT 20000
 void OutputThread(void){  // foreground thread
-  UART_OutString("\n\rEE445M/EE380L, Lab 3 Preparation 4\n\r");
+  Serial_OutString("\n\rEE445M/EE380L, Lab 3 Preparation 4\n\r");
   while(SignalCount1+SignalCount2+SignalCount3<100*MAXCOUNT){
     OS_Sleep(1000);   // 1 second
-    UART_OutString(".");
+    Serial_OutString(".");
   }
-  UART_OutString(" done\n\r");
-  UART_OutString("Signalled="); UART_OutUDec(SignalCount1+SignalCount2+SignalCount3);
-  UART_OutString(", Waited="); UART_OutUDec(WaitCount1+WaitCount2+WaitCount3);
-  UART_OutString("\n\r");
+  Serial_OutString(" done\n\r");
+  Serial_OutString("Signalled="); Serial_OutUDec(SignalCount1+SignalCount2+SignalCount3);
+  Serial_OutString(", Waited="); Serial_OutUDec(WaitCount1+WaitCount2+WaitCount3);
+  Serial_OutString("\n\r");
   OS_Kill();
 }
 void Wait1(void){  // foreground thread

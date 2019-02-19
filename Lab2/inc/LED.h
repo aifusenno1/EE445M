@@ -13,19 +13,25 @@
 
 void LED_Init(void);
 
+// PF1
 void LED_RED_ON(void);
 
 void LED_RED_OFF(void);
 
 void LED_RED_TOGGLE(void);
 
+// PF2
 void LED_BLUE_ON(void);
 
 void LED_BLUE_OFF(void);
 
+void LED_BLUE_TOGGLE(void);
+
+// PF3
 void LED_GREEN_ON(void);
 
 void LED_GREEN_OFF(void);
 
+void LED_GREEN_TOGGLE(void);
 
 

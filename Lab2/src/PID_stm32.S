@@ -14,6 +14,7 @@
 ;* INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
 ;*******************************************************************************/
 
+
   THUMB
   REQUIRE8
   PRESERVE8

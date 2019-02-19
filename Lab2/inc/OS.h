@@ -11,12 +11,25 @@
 #ifndef INC_OS_H_
 #define INC_OS_H_
 
+#include <stdint.h>
 
 // edit these depending on your clock
 #define TIME_1MS    80000
 #define TIME_2MS    (2*TIME_1MS)
 #define TIME_500US  (TIME_1MS/2)
 #define TIME_250US  (TIME_1MS/5)
+
+typedef struct tcb {
+	uint32_t *sp;         // ** MUST be the first field ** saved stack pointer (not used by active thread)
+	struct tcb *next;	  // ** MUST be the second field
+	struct tcb *prev;
+	int id;
+	uint32_t sleep;
+//	int blocked;
+//	uint32_t priority;
+} tcbType;
+
+extern tcbType *RunPt;
 
 // feel free to change the type of semaphore, there are lots of good solutions
 struct  Sema4{
