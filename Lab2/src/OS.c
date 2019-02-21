@@ -30,12 +30,6 @@ static uint32_t threadCnt;
 static int nextID = 0;
 static tcbType *lastThread;
 
-// initialize all id to -1
-static void init_tcbs(void) {
-	for (int i=0; i<NUMTHREADS; i++) {
-		tcbs[i].id = -1;
-	}
-}
 
 // ******** OS_Init ************
 // initialize operating system, disable interrupts until OS_Launch
@@ -46,7 +40,6 @@ void OS_Init(void){
   OS_DisableInterrupts();
   PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
   Serial_Init();
-  init_tcbs();
 
   NVIC_ST_CTRL_R = 0;         // disable SysTick during setup
   NVIC_ST_CURRENT_R = 0;      // any write to current clears it
@@ -79,7 +72,7 @@ static void setInitialStack(int i, void (*thread_starting_addr)(void)){
  */
 static int findFreeThreadSlot(void) {
 	for (int i=0; i<NUMTHREADS; i++) {
-		if (tcbs[i].id == -1)
+		if (tcbs[i].state == FREE)
 			return i;
 	}
 	return -1;
@@ -101,7 +94,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		tcbs[0].next = &tcbs[0];
 		tcbs[0].prev = &tcbs[0];
 		tcbs[0].id = nextID++;
-		tcbs[0].sleep = 0;
+		tcbs[0].state = ACTIVE;
 		setInitialStack(0, task);
 		lastThread = &tcbs[0];
 		RunPt = &tcbs[0];
@@ -119,8 +112,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 
 		setInitialStack(slot, task);
 		tcbs[slot].id = nextID++;
-		tcbs[slot].sleep = 0;
-
+		tcbs[slot].state = ACTIVE;
 	}
 
 	threadCnt++;
@@ -148,7 +140,7 @@ void OS_Launch(uint32_t theTimeSlice){
 static void scheduler(void) {
 	do {
 		RunPt = RunPt->next;
-	} while (RunPt->sleep == 1);
+	} while (RunPt->state == SLEEP);
 }
 
 // ******** OS_Sleep ************
@@ -172,6 +164,121 @@ void OS_Suspend(void) {
 	NVIC_ST_CURRENT_R = 0; 			// clear current count
 	NVIC_INT_CTRL_R |= 1 << 26;     // sets the PENDSTSET bit, force systick handler
 }
+
+
+// ******** OS_InitSemaphore ************
+// initialize semaphore
+// input:  pointer to a semaphore
+// output: none
+void OS_InitSemaphore(Sema4Type *semaPt, long value) {
+	semaPt->value = value;
+}
+
+// ******** OS_Wait ************
+// decrement semaphore
+// Lab2 spinlock
+// Lab3 block if less than zero
+// input:  pointer to a counting semaphore
+// output: none
+void OS_Wait(Sema4Type *semaPt) {
+	OS_DisableInterrupts();
+	while (semaPt->value == 0) {
+		OS_EnableInterrupts();
+		OS_Suspend();				// run thread switch
+		OS_DisableInterrupts();
+	}
+	semaPt->value = semaPt->value - 1;
+	OS_EnableInterrupts();
+}
+
+// ******** OS_Signal ************
+// increment semaphore
+// Lab2 spinlock
+// Lab3 wakeup blocked thread if appropriate
+// input:  pointer to a counting semaphore
+// output: none
+void OS_Signal(Sema4Type *semaPt) {
+	OS_DisableInterrupts();
+	semaPt->value = semaPt->value + 1;
+	OS_EnableInterrupts();
+}
+
+
+// ******** OS_bWait ************
+// Lab2 spinlock, set to 0
+// Lab3 block if less than zero
+// input:  pointer to a binary semaphore
+// output: none
+void OS_bWait(Sema4Type *semaPt) {
+//	OS_DisableInterrupts();
+//	semaPt->value = semaPt->value - 1;
+//	if (semaPt->value < 0) {
+//		RunPt->blocked = semaPt;
+//		RunPt->state = BLOCKED;
+//		OS_EnableInterrupts();
+//		OS_Suspend();				// run thread switch
+//	}
+//	OS_EnableInterrupts();
+	OS_DisableInterrupts();
+	while (semaPt->value == 0) {    // if it's 0, need to wait for other thread to signal it (set it)
+		OS_EnableInterrupts();		// if it's 1, meaning already signaled (or maybe initially not acquired)
+		OS_Suspend();				// run thread switch
+		OS_DisableInterrupts();
+	}
+	semaPt->value = 0;    // write zero back to it, prepared for usage next time
+	OS_EnableInterrupts();
+
+}
+
+// ******** OS_bSignal ************
+// Lab2 spinlock, set to 1
+// Lab3 wakeup blocked thread if appropriate
+// input:  pointer to a binary semaphore
+// output: none
+void OS_bSignal(Sema4Type *semaPt) {
+	OS_DisableInterrupts();
+	semaPt->value = 1;
+	OS_EnableInterrupts();
+}
+
+
+static unsigned long mailbox;
+static Sema4Type * mb_DataValid;
+static Sema4Type * mb_BoxFree;
+// ******** OS_MailBox_Init ************
+// Initialize communication channel
+// Inputs:  none
+// Outputs: none
+void OS_MailBox_Init(void) {
+	OS_InitSemaphore(mb_DataValid, 0);  // initialized to zero meaning the MailBox is empty. When DataValid equals one it means the mailbox has data in it placed by Consumer that has not been read by the Display.
+	OS_InitSemaphore(mb_BoxFree, 1);    // initialized to one meaning the MailBox is free. When BoxFree equals zero it means the mailbox contains data that has not yet been received
+}
+
+// ******** OS_MailBox_Send ************
+// enter mail into the MailBox
+// Inputs:  data to be sent
+// Outputs: none
+// This function will be called from a foreground thread
+// It will spin/block if the MailBox contains data not yet received
+void OS_MailBox_Send(unsigned long data) {
+	OS_bWait(mb_BoxFree);  // wait until mailbox is free, then mark it full
+	mailbox = data;
+	OS_bSignal(mb_DataValid);  // signal that mailbox is filled
+}
+
+// ******** OS_MailBox_Recv ************
+// remove mail from the MailBox
+// Inputs:  none
+// Outputs: data received
+// This function will be called from a foreground thread
+// It will spin/block if the MailBox is empty
+unsigned long OS_MailBox_Recv(void) {
+	unsigned long ret;
+	OS_bWait(mb_DataValid);  // wait until mailbox data is filled
+	ret = mailbox;
+	OS_bSignal(mb_BoxFree);  // signal that mailbox is now free
+}
+
 
 
 static void (*Task1)(void);   // user function

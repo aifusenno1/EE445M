@@ -268,6 +268,7 @@ unsigned long data,voltage;
 //--------------end of Task 3-----------------------------
 
 //------------------Task 4--------------------------------
+// CPU bound
 // foreground thread that runs without waiting or sleeping
 // it executes a digital controller
 //******** PID ***************
@@ -811,11 +812,14 @@ int Testmain6(void){      // Testmain6  Lab 3
 void Thread8(void){       // only thread running
   while(1){
     PE0 ^= 0x01;      // debugging profile
+    LED_RED_TOGGLE();
   }
 }
 int Testmain7(void){       // Testmain7
   PortE_Init();
   OS_Init();           // initialize, disable interrupts
+  LED_Init();
+
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread8,128,2);
   OS_Launch(TIME_1MS/10); // 100us, doesn't return, interrupts enabled in here

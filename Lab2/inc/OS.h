@@ -19,24 +19,33 @@
 #define TIME_500US  (TIME_1MS/2)
 #define TIME_250US  (TIME_1MS/5)
 
+enum State {
+		FREE,
+		ACTIVE,
+		SLEEP,
+		BLOCKED
+};
+
+// feel free to change the type of semaphore, there are lots of good solutions
+typedef struct Sema4{
+  long value;   // > 0 means free, otherwise means busy
+// add other components here, if necessary to implement blocking
+} Sema4Type;
+
+
 typedef struct tcb {
 	uint32_t *sp;         // ** MUST be the first field ** saved stack pointer (not used by active thread)
 	struct tcb *next;	  // ** MUST be the second field
 	struct tcb *prev;
+	enum State state;
 	int id;
-	uint32_t sleep;
-//	int blocked;
+	uint32_t sleepTimeLeft;    // number of cycles left the thread needs to remain in sleep state
+	Sema4Type *blocked;
 //	uint32_t priority;
 } tcbType;
 
 extern tcbType *RunPt;
 
-// feel free to change the type of semaphore, there are lots of good solutions
-struct  Sema4{
-  long Value;   // >0 means free, otherwise means busy
-// add other components here, if necessary to implement blocking
-};
-typedef struct Sema4 Sema4Type;
 
 
 // ******** OS_Init ************
