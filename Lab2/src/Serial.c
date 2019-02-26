@@ -97,7 +97,7 @@ void Serial_Init(void){
   GPIO_PORTA_AMSEL_R = 0;               // disable analog functionality on PA
   NVIC_PRI1_R = (NVIC_PRI1_R&0xFFFF00FF)|0x00004000; // bits 13-15  UART0 = priority 2
   NVIC_EN0_R = NVIC_EN0_INT5;           // enable interrupt 5 in NVIC
-  EnableInterrupts();
+//  EnableInterrupts();
 }
 
 // copy from hardware RX FIFO to software RX FIFO
@@ -120,15 +120,20 @@ void static copySoftwareToHardware(void){
 }
 // input ASCII character from UART
 // spin if RxFifo is empty
+// should only be called in main thread
 char Serial_InChar(void){
   char letter;
-  while(RxFifo_Get(&letter) == FIFOFAIL){};
+  RxFifo_Get(&letter);
   return(letter);
 }
 // output ASCII character to UART
 // spin if TxFifo is full
+// should only be called in main thread
 void Serial_OutChar(char data){
-  while(TxFifo_Put(data) == FIFOFAIL){};
+  TxFifo_Put(data);
+
+  // I have to copy TXFIFO into hardware here (instead of waiting for next interrupt)
+    // otherwise interrupt never occurs (it's never copied for some reason)
   UART0_IM_R &= ~UART_IM_TXIM;          // disable TX FIFO interrupt
   copySoftwareToHardware();
   UART0_IM_R |= UART_IM_TXIM;           // enable TX FIFO interrupt
@@ -141,9 +146,9 @@ void UART0_Handler(void){
   if(UART0_RIS_R&UART_RIS_TXRIS){       // hardware TX FIFO <= 2 items
     UART0_ICR_R = UART_ICR_TXIC;        // acknowledge TX FIFO
     // copy from software TX FIFO to hardware TX FIFO
-    copySoftwareToHardware();
+    copySoftwareToHardware();			// no need to disable interrupt, since this ISR won't be preempted by itself or context switch (low priority)
     if(TxFifo_Size() == 0){             // software TX FIFO is empty
-      UART0_IM_R &= ~UART_IM_TXIM;      // disable TX FIFO interrupt
+      UART0_IM_R &= ~UART_IM_TXIM;      // disable TX FIFO interrupt if empty (won't be able to get anything)
     }
   }
   if(UART0_RIS_R&UART_RIS_RXRIS){       // hardware RX FIFO >= 2 items

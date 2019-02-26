@@ -458,6 +458,15 @@ void Output_On(void);
 void Output_Color(uint32_t newColor);
 
 // ************** Self-created functions *************
+/*
+ * Divide the LCD into two logical partitions and provide
+ * an interface to output a string and an integer
+ * inputs:	device: 0 for top screen, 1 for bottom screen
+ *			line: 0 - 3
+ *			string: the string to display
+ *			value: the value to display following the string
+ * output: none
+ */
 void ST7735_Message (int device, int line, char *string, int32_t value);
 
 

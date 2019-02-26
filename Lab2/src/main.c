@@ -30,6 +30,8 @@
 #include <string.h>
 #include "Serial.h"
 #include "LED.h"
+#include "interpreter.h"
+
 
 #define Lab2 1
 #define Lab3 0
@@ -426,6 +428,7 @@ void Thread1b(void){
   for(;;){
     PE0 ^= 0x01;       // heartbeat
     LED_RED_TOGGLE();
+    Serial_println("1");
     Count1++;
   }
 }
@@ -434,6 +437,7 @@ void Thread2b(void){
   for(;;){
     PE1 ^= 0x02;       // heartbeat
     LED_BLUE_TOGGLE();
+    Serial_println("2");
     Count2++;
   }
 }
@@ -442,13 +446,15 @@ void Thread3b(void){
   for(;;){
     PE2 ^= 0x04;       // heartbeat
     LED_GREEN_TOGGLE();
+    Serial_println("3");
     Count3++;
   }
 }
-int main(void){  // Testmain2
+int Testmain2(void){  // Testmain2
   OS_Init();           // initialize, disable interrupts
   PortE_Init();       // profile user threads
   LED_Init();
+  Serial_Init();
 
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread1b,128,1);
@@ -473,6 +479,7 @@ Sema4Type Readyc;        // set in background
 int Lost;
 void BackgroundThread1c(void){   // called at 1000 Hz
   Count1++;
+  Serial_println("b1c");
   OS_Signal(&Readyc);
 }
 void Thread5c(void){
@@ -480,6 +487,7 @@ void Thread5c(void){
     OS_Wait(&Readyc);
     Count5++;   // Count2 + Count5 should equal Count1
     Lost = Count1-Count5-Count2;
+    Serial_println("5c");
   }
 }
 void Thread2c(void){
@@ -492,6 +500,7 @@ void Thread2c(void){
   for(;;){
     OS_Wait(&Readyc);
     Count2++;   // Count2 + Count5 should equal Count1
+    Serial_println("2c");
   }
 }
 
@@ -499,11 +508,13 @@ void Thread3c(void){
   Count3 = 0;
   for(;;){
     Count3++;
+    Serial_println("3c");
   }
 }
 void Thread4c(void){ int i;
   for(i=0;i<64;i++){
     Count4++;
+    Serial_println("4c");
     OS_Sleep(10);
   }
   OS_Kill();
@@ -511,11 +522,14 @@ void Thread4c(void){ int i;
 }
 void BackgroundThread5c(void){   // called when Select button pushed
   NumCreated += OS_AddThread(&Thread4c,128,3);
+  Serial_println("b5c");
 }
 
-int Testmain3(void){   // Testmain3
+int main(void){   // Testmain3
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
+  Serial_Init();
+
 // Count2 + Count5 should equal Count1
   NumCreated = 0 ;
   OS_AddSW1Task(&BackgroundThread5c,2);

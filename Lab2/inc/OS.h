@@ -289,4 +289,6 @@ void OS_ClearPeriodicTime(void);
 
 uint32_t OS_ReadPeriodicTime(void);
 
+void threadScheduler(void);
+
 #endif /* INC_OS_H_ */

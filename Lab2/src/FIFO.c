@@ -26,6 +26,7 @@
  */
 
 #include "FIFO.h"
+#include "OS.h"
 
 long StartCritical (void);    // previous I bit, disable interrupts
 void EndCritical(long sr);    // restore I bit to previous value
@@ -42,20 +43,28 @@ unsigned long volatile TxPutI;// put next
 unsigned long volatile TxGetI;// get next
 txDataType static TxFifo[TXFIFOSIZE];
 
+static Sema4Type TxRoomLeft;
+static Sema4Type TxMutex;		// multiple main thread may enter Serial Input routine, make it reentrant
+// TxPut is called in foreground threads
+// TxGet is called in ISR
+
 // initialize index FIFO
 void TxFifo_Init(void){ long sr;
   sr = StartCritical(); // make atomic
   TxPutI = TxGetI = 0;  // Empty
+  OS_InitSemaphore(&TxRoomLeft, TXFIFOSIZE);
+  OS_InitSemaphore(&TxMutex, 1);
   EndCritical(sr);
 }
+
 // add element to end of index FIFO
 // return TXFIFOSUCCESS if successful
 int TxFifo_Put(txDataType data){
-  if((TxPutI-TxGetI) & ~(TXFIFOSIZE-1)){
-    return(TXFIFOFAIL); // Failed, fifo full
-  }
+  OS_Wait(&TxRoomLeft);    //  because of this, technically Serial output can only be used in main threads
+//  OS_bWait(&TxMutex);
   TxFifo[TxPutI&(TXFIFOSIZE-1)] = data; // put
-  TxPutI++;  // Success, update
+  TxPutI++;  //  PutI is never wrapped around
+//  OS_bSignal(&TxMutex);
   return(TXFIFOSUCCESS);
 }
 // remove element from front of index FIFO
@@ -65,7 +74,8 @@ int TxFifo_Get(txDataType *datapt){
     return(TXFIFOFAIL); // Empty if TxPutI=TxGetI
   }
   *datapt = TxFifo[TxGetI&(TXFIFOSIZE-1)];
-  TxGetI++;  // Success, update
+  TxGetI++;  // GetI is never wrapped around
+  OS_Signal(&TxRoomLeft);
   return(TXFIFOSUCCESS);
 }
 // number of elements in index FIFO
@@ -83,11 +93,17 @@ unsigned short TxFifo_Size(void){
 rxDataType volatile *RxPutPt; // put next
 rxDataType volatile *RxGetPt; // get next
 rxDataType static RxFifo[RXFIFOSIZE];
+static Sema4Type RxDataAva;
+static Sema4Type RxMutex;     // multiple threads may call Serial input, so need to implement mutex
+// RX Put is called in ISR
+// RX Get is called by main thread
 
 // initialize pointer FIFO
 void RxFifo_Init(void){ long sr;
   sr = StartCritical();      // make atomic
   RxPutPt = RxGetPt = &RxFifo[0]; // Empty
+  OS_InitSemaphore(&RxDataAva, 0);
+  OS_InitSemaphore(&RxMutex, 1);
   EndCritical(sr);
 }
 // add element to end of pointer FIFO
@@ -99,24 +115,25 @@ int RxFifo_Put(rxDataType data){
     nextPutPt = &RxFifo[0];  // wrap
   }
   if(nextPutPt == RxGetPt){
-    return(RXFIFOFAIL);      // Failed, fifo full
+    return(RXFIFOFAIL);      // Failed, fifo full; Since cannot wait in Put
   }
   else{
     *(RxPutPt) = data;       // Put
     RxPutPt = nextPutPt;     // Success, update
+    OS_Signal(&RxDataAva);
     return(RXFIFOSUCCESS);
   }
 }
 // remove element from front of pointer FIFO
 // return RXFIFOSUCCESS if successful
 int RxFifo_Get(rxDataType *datapt){
-  if(RxPutPt == RxGetPt ){
-    return(RXFIFOFAIL);      // Empty if PutPt=GetPt
-  }
+  OS_Wait(&RxDataAva);
+  OS_bWait(&RxMutex);
   *datapt = *(RxGetPt++);
   if(RxGetPt == &RxFifo[RXFIFOSIZE]){
      RxGetPt = &RxFifo[0];   // wrap
   }
+  OS_bSignal(&RxMutex);
   return(RXFIFOSUCCESS);
 }
 // number of elements in pointer FIFO
