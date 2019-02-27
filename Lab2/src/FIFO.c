@@ -27,6 +27,8 @@
 
 #include "FIFO.h"
 #include "OS.h"
+#include "LED.h"
+#include "ST7735.h"
 
 long StartCritical (void);    // previous I bit, disable interrupts
 void EndCritical(long sr);    // restore I bit to previous value
@@ -60,11 +62,14 @@ void TxFifo_Init(void){ long sr;
 // add element to end of index FIFO
 // return TXFIFOSUCCESS if successful
 int TxFifo_Put(txDataType data){
+
+//  if (TxMutex.value == 0)
+//	  LED_GREEN_TOGGLE();
   OS_Wait(&TxRoomLeft);    //  because of this, technically Serial output can only be used in main threads
-//  OS_bWait(&TxMutex);
+  OS_bWait(&TxMutex);
   TxFifo[TxPutI&(TXFIFOSIZE-1)] = data; // put
   TxPutI++;  //  PutI is never wrapped around
-//  OS_bSignal(&TxMutex);
+  OS_bSignal(&TxMutex);
   return(TXFIFOSUCCESS);
 }
 // remove element from front of index FIFO

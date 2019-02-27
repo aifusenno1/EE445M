@@ -17,6 +17,11 @@ void EndCritical(long sr);    // restore I bit to previous value
 void StartOS(void);
 static void os_timer_init(void);
 
+#define PE0  (*((volatile unsigned long *)0x40024004))
+#define PE1  (*((volatile unsigned long *)0x40024008))
+#define PE2  (*((volatile unsigned long *)0x40024010))
+#define PE3  (*((volatile unsigned long *)0x40024020))
+
 #define TIME_1MS    80000
 #define TIME_2MS    (2*TIME_1MS)
 #define TIME_500US  (TIME_1MS/2)
@@ -26,7 +31,7 @@ static void os_timer_init(void);
 #define NUMTHREADS  10        // maximum number of threads
 #define STACKSIZE   100      // number of 32-bit words in stack
 
-static unsigned long OS_Timer;	   // in unit of 1ms by default
+unsigned long OS_Timer;	   // in unit of 1ms by default
 
 static int32_t Stacks[NUMTHREADS][STACKSIZE];
 tcbType *RunPt;
@@ -120,7 +125,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		tcbs[slot].id = nextID++;
 		tcbs[slot].state = ACTIVE;
 	}
-
+//	Serial_println("%u", threadCnt);
 	threadCnt++;
 
 	EndCritical(sr);
@@ -155,7 +160,7 @@ void threadScheduler(void) {
 	do {
 		RunPt = RunPt->next;
 	} while (RunPt->state == SLEEP);
-//    Serial_println("%u",RunPt->id);
+//    Serial_println("s%u",RunPt->id);
 }
 
 // ******** OS_Sleep ************
@@ -175,6 +180,7 @@ void threadScheduler(void) {
 // Same function as OS_Sleep(0)
 // input:  none
 // output: none
+// **Interrupt must be enabled entering OS_Suspend
 void OS_Suspend(void) {
 	NVIC_ST_CURRENT_R = 0; 			// clear current count
 	NVIC_INT_CTRL_R |= 1 << 26;     // sets the PENDSTSET bit, force systick handler
@@ -187,9 +193,10 @@ void OS_Suspend(void) {
 // You are free to select the time resolution for this function
 // OS_Sleep(0) implements cooperative multitasking
 void OS_Sleep(unsigned long sleepTime) {
-	OS_DisableInterrupts();  // will be re-enabled in thread switch
-	RunPt->sleepTimeLeft = sleepTime * 1000;   // sleep time in 1us, the unit of OS_Timer
+	OS_DisableInterrupts();
+	RunPt->sleepTimeLeft = sleepTime;   // sleep time in 1ms, the unit of OS_Timer
 	RunPt->state = SLEEP;
+	OS_EnableInterrupts();
 	OS_Suspend();
 }
 
@@ -198,10 +205,14 @@ void OS_Sleep(unsigned long sleepTime) {
 // input:  none
 // output: none
 void OS_Kill(void) {
-	OS_DisableInterrupts();   // will be re-enabled in thread switch
+	OS_DisableInterrupts();
+	// update last thread if this is the last thread
+	if (lastThread == RunPt)
+		lastThread = RunPt->prev;
 	RunPt->state = FREE;
 	RunPt->prev->next = RunPt->next;
 	RunPt->next->prev = RunPt->prev;
+	OS_EnableInterrupts();
 	threadCnt--;
 	OS_Suspend();
 }
@@ -231,6 +242,8 @@ static void os_timer_init() {
 
 void Timer3A_Handler(void){
 	TIMER3_ICR_R = TIMER_ICR_TATOCINT;// acknowledge TIMER3A timeout
+//	  LED_GREEN_ON();
+//	Serial_println("1 %u", NVIC_ST_CURRENT_R);
 	OS_Timer++;
 	// decrement all sleeping threads
 	for (int i=0; i<NUMTHREADS; i++) {
@@ -239,6 +252,7 @@ void Timer3A_Handler(void){
 				tcbs[i].state = ACTIVE;
 		}
 	}
+//	  LED_GREEN_OFF();
 }
 
 
@@ -524,8 +538,10 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 
 void Timer1A_Handler(void){
 	TIMER1_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
+//	LED_BLUE_ON();
 	periodic_tasks[0]();                // execute user task
 	periodic_counters[0]++;
+//	LED_BLUE_OFF();
 }
 
 static void (*sw1_task)(void);
@@ -567,14 +583,13 @@ int OS_AddSW1Task(void(*task)(void), unsigned long priority) {
 		GPIO_PORTF_AMSEL_R = 0;       		//     disable analog functionality on PF
 		GPIO_PORTF_PUR_R |= 0x10;     		//     enable weak pull-up on PF4
 		GPIO_PORTF_IS_R &= ~0x10;     		// (d) PF4 is edge-sensitive
-		GPIO_PORTF_IBE_R &= ~0x10;     		//     PF4 is not edges
-		GPIO_PORTF_IEV_R &= ~0x10;     		//     PF4 falling edges
-
+		GPIO_PORTF_IBE_R |= 0x10;     		//     PF4 is on both edges
+											// debounce requires 2 edges: press and release
 		GPIO_PORTF_ICR_R = 0x10;      		// (e) clear flag4
 		GPIO_PORTF_IM_R |= 0x10;      		// (f) arm interrupt on PF4
 		NVIC_PRI7_R = (NVIC_PRI7_R&0xFF00FFFF) | ((priority & 0x07) << 21);  // set up priority
 		NVIC_EN0_R = 0x40000000;      		// (h) enable interrupt 30 in NVIC
-		lastPF4 = PF4 & 0x10;
+		lastPF4 = PF4 & 0x10;				// initially high
 		EndCritical(sr);
 		return 1;
 	} else {
@@ -613,8 +628,7 @@ int OS_AddSW2Task(void(*task)(void), unsigned long priority) {
 		GPIO_PORTF_AMSEL_R = 0;       		//     disable analog functionality on PF
 		GPIO_PORTF_PUR_R |= 0x01;     		//     enable weak pull-up on PF0
 		GPIO_PORTF_IS_R &= ~0x01;     		// (d) PF0 is edge-sensitive
-		GPIO_PORTF_IBE_R &= ~0x01;     		//     PF0 is not edges
-		GPIO_PORTF_IEV_R &= ~0x01;     		//     PF0 falling edges
+		GPIO_PORTF_IBE_R |= 0x01;     		//     PF0 is both edges
 
 		GPIO_PORTF_ICR_R = 0x01;      		// (e) clear flag0
 		GPIO_PORTF_IM_R |= 0x01;      		// (f) arm interrupt on PF0
@@ -630,14 +644,18 @@ int OS_AddSW2Task(void(*task)(void), unsigned long priority) {
 }
 
 static void sw1_debounce(void) {
+//	LED_GREEN_TOGGLE();
 	OS_Sleep(10);
+	lastPF4 = PF4 & 0x10;		// lastPF4 reflects the state of switch after debounce
 	GPIO_PORTF_ICR_R = 0x10;
 	GPIO_PORTF_IM_R |= 0x10;
+//	LED_GREEN_TOGGLE();
 	OS_Kill();	// only one time usage, so kill right away
 }
 
 static void sw2_debounce(void) {
 	OS_Sleep(10);
+	lastPF0 = PF0 & 0x01;
 	GPIO_PORTF_ICR_R = 0x01;
 	GPIO_PORTF_IM_R |= 0x01;
 	OS_Kill();
@@ -645,24 +663,27 @@ static void sw2_debounce(void) {
 
 void GPIOPortF_Handler(void) {  // negative logic
 	if (GPIO_PORTF_RIS_R & 0x10) {  // if PF4 pressed
+
 		GPIO_PORTF_IM_R &= ~0x10;	// disarm interrupt on PF4, debounce purpose
-//		if (lastPF4) {             	// 0x10 means it was previously released, negative logic
+		if (lastPF4) {             	// 0x10 means it was previously released, negative logic
 			sw1_task();
-			int ret = OS_AddThread(sw1_debounce, 128, sw1_pri);  // for debounce purpose, priority for switch tasks need to be high
-			if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
-				GPIO_PORTF_ICR_R = 0x10;
-				GPIO_PORTF_IM_R |= 0x10;
-//			}
+		}
+		// debounce required on both press and release
+		int ret = OS_AddThread(sw1_debounce, 128, sw1_pri);  // for debounce purpose, priority for switch tasks need to be high
+		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
+			GPIO_PORTF_ICR_R = 0x10;
+			GPIO_PORTF_IM_R |= 0x10;
 		}
 	}
 	if (GPIO_PORTF_RIS_R & 0x01) { // if PF0 pressed
 		GPIO_PORTF_IM_R &= ~0x01;
-//		if (lastPF0) {
-			int ret = OS_AddThread(sw2_debounce, 128, sw2_pri);  // for debounce purpose, priority for switch tasks need to be high
-			if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
-				GPIO_PORTF_ICR_R = 0x01;
-				GPIO_PORTF_IM_R |= 0x01;
-//			}
+		if (lastPF0) {
+			sw2_task();
+		}
+		int ret = OS_AddThread(sw2_debounce, 128, sw2_pri);  // for debounce purpose, priority for switch tasks need to be high
+		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
+			GPIO_PORTF_ICR_R = 0x01;
+			GPIO_PORTF_IM_R |= 0x01;
 		}
 	}
 }

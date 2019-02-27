@@ -68,13 +68,14 @@ unsigned short MaxWithI1;
 #define PE3  (*((volatile unsigned long *)0x40024020))
 
 void PortE_Init(void){
-  SYSCTL_RCGCGPIO_R |= 0x10;       // activate port E
-  while((SYSCTL_RCGCGPIO_R&0x10)==0){};
-  GPIO_PORTE_DIR_R |= 0x0F;    // make PE3-0 output heartbeats
+	SYSCTL_RCGCGPIO_R |= 0x10;       // activate port E
+  while(( SYSCTL_RCGCGPIO_R&0x10)==0){};
+  GPIO_PORTE_CR_R = 0x2F;           // allow changes to PE3-0
   GPIO_PORTE_AFSEL_R &= ~0x0F;   // disable alt funct on PE3-0
-  GPIO_PORTE_DEN_R |= 0x0F;     // enable digital I/O on PE3-0
   GPIO_PORTE_PCTL_R = ~0x0000FFFF;
   GPIO_PORTE_AMSEL_R &= ~0x0F;;      // disable analog functionality on PF
+  GPIO_PORTE_DEN_R |= 0x0F;     // enable digital I/O on PE3-0
+  GPIO_PORTE_DIR_R = 0x0F;    // make PE3-0 output heartbeats  (PE is opposite from PF?)
 }
 //------------------Task 1--------------------------------
 // CPU bound
@@ -445,7 +446,6 @@ void Thread3b(void){
   Count3 = 0;
   for(;;){
     PE2 ^= 0x04;       // heartbeat
-    LED_GREEN_TOGGLE();
     Serial_println("3");
     Count3++;
   }
@@ -478,16 +478,18 @@ int Testmain2(void){  // Testmain2
 Sema4Type Readyc;        // set in background
 int Lost;
 void BackgroundThread1c(void){   // called at 1000 Hz
+//  LED_GREEN_TOGGLE();
   Count1++;
-  Serial_println("b1c");
   OS_Signal(&Readyc);
+//  LED_GREEN_TOGGLE();
 }
 void Thread5c(void){
   for(;;){
     OS_Wait(&Readyc);
+    PE0 ^= 0x01;
     Count5++;   // Count2 + Count5 should equal Count1
     Lost = Count1-Count5-Count2;
-    Serial_println("5c");
+//    Serial_println("5c");
   }
 }
 void Thread2c(void){
@@ -500,35 +502,40 @@ void Thread2c(void){
   for(;;){
     OS_Wait(&Readyc);
     Count2++;   // Count2 + Count5 should equal Count1
-    Serial_println("2c");
+//    Serial_println("%u %u %u", Count1, Count2, Count5);
   }
 }
 
 void Thread3c(void){
   Count3 = 0;
   for(;;){
+	PE3 ^= 0x8;
     Count3++;
-    Serial_println("3c");
+    PE3 ^= 0x8;
   }
 }
 void Thread4c(void){ int i;
   for(i=0;i<64;i++){
     Count4++;
-    Serial_println("4c");
     OS_Sleep(10);
+    LED_BLUE_TOGGLE();
+    LED_BLUE_TOGGLE();
   }
   OS_Kill();
   Count4 = 0;
 }
 void BackgroundThread5c(void){   // called when Select button pushed
   NumCreated += OS_AddThread(&Thread4c,128,3);
-  Serial_println("b5c");
+  PE1 ^= 0x02;
 }
 
 int main(void){   // Testmain3
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
   Serial_Init();
+  PortE_Init();
+  LED_Init();
+  ST7735_InitR(ST7735_BLACK);
 
 // Count2 + Count5 should equal Count1
   NumCreated = 0 ;

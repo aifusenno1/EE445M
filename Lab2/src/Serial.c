@@ -34,6 +34,7 @@
 #include "FIFO.h"
 #include "Serial.h"
 #include "LED.h"
+#include "ST7735.h"
 
 #define NVIC_EN0_INT5           0x00000020  // Interrupt 5 enable
 
