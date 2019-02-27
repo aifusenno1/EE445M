@@ -529,7 +529,7 @@ void BackgroundThread5c(void){   // called when Select button pushed
   PE1 ^= 0x02;
 }
 
-int main(void){   // Testmain3
+int Testmain3(void){   // Testmain3
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
   Serial_Init();
@@ -577,6 +577,7 @@ void Thread2d(void){
   for(;;){
     OS_bWait(&Readyd);
     Count2++;
+    Serial_println("%u %u %u", Count1, Count2, Count3);
   }
 }
 void Thread3d(void){
@@ -598,6 +599,10 @@ void BackgroundThread5d(void){   // called when Select button pushed
 int Testmain4(void){   // Testmain4
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
+  Serial_Init();
+  PortE_Init();
+  LED_Init();
+
   NumCreated = 0 ;
   OS_AddPeriodicThread(&BackgroundThread1d,PERIOD,0);
   OS_AddSW1Task(&BackgroundThread5d,2);
