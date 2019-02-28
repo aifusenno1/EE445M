@@ -62,10 +62,9 @@ void TxFifo_Init(void){ long sr;
 // add element to end of index FIFO
 // return TXFIFOSUCCESS if successful
 int TxFifo_Put(txDataType data){
-
-//  if (TxMutex.value == 0)
-//	  LED_GREEN_TOGGLE();
-  OS_Wait(&TxRoomLeft);    //  because of this, technically Serial output can only be used in main threads
+//	if (TxRoomLeft.value == 0)
+//		  LED_GREEN_ON();
+  OS_Wait(&TxRoomLeft);    //  because of this, technically Serial I/O can only be used in main threads
   OS_bWait(&TxMutex);
   TxFifo[TxPutI&(TXFIFOSIZE-1)] = data; // put
   TxPutI++;  //  PutI is never wrapped around
@@ -120,7 +119,7 @@ int RxFifo_Put(rxDataType data){
     nextPutPt = &RxFifo[0];  // wrap
   }
   if(nextPutPt == RxGetPt){
-    return(RXFIFOFAIL);      // Failed, fifo full; Since cannot wait in Put
+    return(RXFIFOFAIL);      // Failed, fifo full; Since cannot wait here (in ISR)
   }
   else{
     *(RxPutPt) = data;       // Put

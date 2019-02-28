@@ -4,6 +4,7 @@
 #include "ST7735.h"
 #include "Serial.h"
 #include "LED.h"
+#include "OS.h"
 
 void DisableInterrupts(void); // Disable interrupts
 void EnableInterrupts(void);  // Enable interrupts
@@ -16,7 +17,7 @@ char input[200];
 
 void interpreter(void) {
 	while (1) {
-		Serial_OutString("Enter Command: ");
+		Serial_OutString("$ ");
 
 		Serial_InString(input, 200);  // 200 will not work for some reason
 

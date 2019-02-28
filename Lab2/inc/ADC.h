@@ -5,13 +5,13 @@
 
 #ifndef INC_ADC_H_
 #define INC_ADC_H_
+#include <stdint.h>
 
 /*
  * Open ADC0SS3 to collect 1 piece of data
  * ADC0
  * SS3
  * Timer2A interrupt (periodic mode)
- * 10000 Hz sampling rate on 80 MHz clock
  * input: the channel number to open
  * output: none
  */

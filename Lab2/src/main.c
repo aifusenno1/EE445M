@@ -30,7 +30,6 @@
 #include <string.h>
 #include "Serial.h"
 #include "LED.h"
-#include "interpreter.h"
 
 
 #define Lab2 1
@@ -68,7 +67,7 @@ unsigned short MaxWithI1;
 #define PE3  (*((volatile unsigned long *)0x40024020))
 
 void PortE_Init(void){
-	SYSCTL_RCGCGPIO_R |= 0x10;       // activate port E
+  SYSCTL_RCGCGPIO_R |= 0x10;       // activate port E
   while(( SYSCTL_RCGCGPIO_R&0x10)==0){};
   GPIO_PORTE_CR_R = 0x2F;           // allow changes to PE3-0
   GPIO_PORTE_AFSEL_R &= ~0x0F;   // disable alt funct on PE3-0
@@ -78,7 +77,6 @@ void PortE_Init(void){
   GPIO_PORTE_DIR_R = 0x0F;    // make PE3-0 output heartbeats  (PE is opposite from PF?)
 }
 //------------------Task 1--------------------------------
-// CPU bound
 // 2 kHz sampling ADC channel 1, using software start trigger
 // background thread executed at 2 kHz
 // 60-Hz notch high-Q, IIR filter, assuming fs=2000 Hz
@@ -109,9 +107,15 @@ unsigned static long LastTime;  // time at previous ADC sample
 unsigned long thisTime;         // time at current ADC sample
 long jitter;                    // time between measured and expected, in us
   if(NumSamples < RUNLENGTH){   // finite time run
+#ifdef DEBUG
     PE0 ^= 0x01;
+//    LED_GREEN_TOGGLE();
+#endif
     input = ADC_In();           // channel set when calling ADC_Init
+#ifdef DEBUG
     PE0 ^= 0x01;
+//    LED_GREEN_TOGGLE();
+#endif
     thisTime = OS_Time();       // current time, 12.5 ns
     DASoutput = Filter(input);
     FilterWork++;        // calculation finished
@@ -131,7 +135,10 @@ long jitter;                    // time between measured and expected, in us
       JitterHistogram[jitter]++;
     }
     LastTime = thisTime;
+#ifdef DEBUG
     PE0 ^= 0x01;
+//    LED_GREEN_TOGGLE();
+#endif
   }
 }
 #endif
@@ -161,14 +168,22 @@ extern unsigned long MaxJitter;
 #endif
 void ButtonWork(void){
 unsigned long myId = OS_Id();
+#ifdef DEBUG
   PE1 ^= 0x02;
-  ST7735_Message(1,0,"NumCreated =",NumCreated);
+#endif
+  ST7735_Message(1,0,"NumCreated = ",NumCreated);
+#ifdef DEBUG
   PE1 ^= 0x02;
+#endif
   OS_Sleep(50);     // set this to sleep for 50msec
-  ST7735_Message(1,1,"PIDWork     =",PIDWork);
-  ST7735_Message(1,2,"DataLost    =",DataLost);
-  ST7735_Message(1,3,"Jitter 0.1us=",MaxJitter);
+  ST7735_Message(1,1,"PIDWork     = ",PIDWork);
+  ST7735_Message(1,2,"DataLost    = ",DataLost);
+  ST7735_Message(1,3,"Jitter 0.1us = ",MaxJitter);
+//  ST7735_Message(0,3,"OSTAT = ",(ADC0_OSTAT_R & 0x04)>> 2);
+
+#ifdef DEBUG
   PE1 ^= 0x02;
+#endif
   OS_Kill();  // done, OS does not return from a Kill
 }
 
@@ -199,7 +214,6 @@ void SW2Push(void){
 //--------------end of Task 2-----------------------------
 
 //------------------Task 3--------------------------------
-//  Fixed Bandwidth
 // hardware timer-triggered ADC sampling at 400Hz
 // Producer runs as part of ADC ISR
 // Producer uses fifo to transmit 400 samples/sec to Consumer
@@ -238,12 +252,16 @@ unsigned long myId = OS_Id();
   ADC_Collect(5, FS, &Producer); // start ADC sampling, channel 5, PD2, 400 Hz
   NumCreated += OS_AddThread(&Display,128,0);
   while(NumSamples < RUNLENGTH) {
-    PE2 = 0x04;
+#ifdef DEBUG
+    PE2 = 0x00;
+#endif
     for(t = 0; t < 64; t++){   // collect 64 ADC samples
       data = OS_Fifo_Get();    // get from producer
       x[t] = data;             // real part is 0 to 4095, imaginary part is 0
     }
-    PE2 = 0x00;
+#ifdef DEBUG
+    PE2 = 0x04;
+#endif
     cr4_fft_64_stm32(y,x,64);  // complex FFT of last 64 ADC values
     DCcomponent = y[0]&0xFFFF; // Real part at frequency 0, imaginary part should be zero
     OS_MailBox_Send(DCcomponent); // called every 2.5ms*64 = 160ms
@@ -261,9 +279,13 @@ unsigned long data,voltage;
   while(NumSamples < RUNLENGTH) {
     data = OS_MailBox_Recv();
     voltage = 3000*data/4095;               // calibrate your device so voltage is in mV
-    PE3 = 0x08;
-    ST7735_Message(0,2,"v(mV) =",voltage);
+#ifdef DEBUG
     PE3 = 0x00;
+#endif
+    ST7735_Message(0,2,"v(mV) = ",voltage);
+#ifdef DEBUG
+    PE3 = 0x08;
+#endif
   }
   OS_Kill();  // done
 }
@@ -315,7 +337,7 @@ unsigned long myId = OS_Id();
 // Interpreter is a foreground thread, accepts input from serial port, outputs to serial port
 // inputs:  none
 // outputs: none
-void Interpreter(void);    // just a prototype, link to your interpreter
+void interpreter(void);    // just a prototype, link to your interpreter
 // add the following commands, leave other commands, if they make sense
 // 1) print performance measures
 //    time-jitter, number of data points lost, number of calculations performed
@@ -327,9 +349,10 @@ void Interpreter(void);    // just a prototype, link to your interpreter
 
 
 //*******************final user main DEMONTRATE THIS TO TA**********
-int realmain(void){
+int main(void){
   OS_Init();           // initialize, disable interrupts
   PortE_Init();
+
   DataLost = 0;        // lost data between producer and consumer
   NumSamples = 0;
   MaxJitter = 0;       // in 1us units
@@ -338,17 +361,18 @@ int realmain(void){
   OS_MailBox_Init();
   OS_Fifo_Init(128);    // ***note*** 4 is not big enough*****
 
-//*******attach background tasks***********
+  //*******attach background tasks***********
   OS_AddSW1Task(&SW1Push,2);
 #if Lab3
   OS_AddSW2Task(&SW2Push,2);  // add this line in Lab 3
 #endif
   ADC_Init(4);  // sequencer 3, channel 4, PD3, sampling in DAS()
+
   OS_AddPeriodicThread(&DAS,PERIOD,1); // 2 kHz real time sampling of PD3
 
   NumCreated = 0 ;
 // create initial foreground threads
-  NumCreated += OS_AddThread(&Interpreter,128,2);
+  NumCreated += OS_AddThread(&interpreter,128,2);
   NumCreated += OS_AddThread(&Consumer,128,1);
   NumCreated += OS_AddThread(&PID,128,3);  // Lab 3, make this lowest priority
 
@@ -428,8 +452,6 @@ void Thread1b(void){
   Count1 = 0;
   for(;;){
     PE0 ^= 0x01;       // heartbeat
-    LED_RED_TOGGLE();
-    Serial_println("1");
     Count1++;
   }
 }
@@ -437,8 +459,6 @@ void Thread2b(void){
   Count2 = 0;
   for(;;){
     PE1 ^= 0x02;       // heartbeat
-    LED_BLUE_TOGGLE();
-    Serial_println("2");
     Count2++;
   }
 }
@@ -446,7 +466,6 @@ void Thread3b(void){
   Count3 = 0;
   for(;;){
     PE2 ^= 0x04;       // heartbeat
-    Serial_println("3");
     Count3++;
   }
 }
@@ -502,7 +521,7 @@ void Thread2c(void){
   for(;;){
     OS_Wait(&Readyc);
     Count2++;   // Count2 + Count5 should equal Count1
-//    Serial_println("%u %u %u", Count1, Count2, Count5);
+    Serial_println("%u %u %u", Count1, Count2, Count5);
   }
 }
 
@@ -535,7 +554,6 @@ int Testmain3(void){   // Testmain3
   Serial_Init();
   PortE_Init();
   LED_Init();
-  ST7735_InitR(ST7735_BLACK);
 
 // Count2 + Count5 should equal Count1
   NumCreated = 0 ;
@@ -591,6 +609,7 @@ void Thread4d(void){ int i;
     Count4++;
     OS_Sleep(1);
   }
+//  Serial_println("%u", Count4);
   OS_Kill();
 }
 void BackgroundThread5d(void){   // called when Select button pushed
@@ -837,8 +856,7 @@ int Testmain6(void){      // Testmain6  Lab 3
 //                on PE0 to measure context switch time
 void Thread8(void){       // only thread running
   while(1){
-    PE0 ^= 0x01;      // debugging profile
-    LED_RED_TOGGLE();
+    PE0 ^= 0x01;
   }
 }
 int Testmain7(void){       // Testmain7

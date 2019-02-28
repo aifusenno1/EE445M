@@ -92,6 +92,7 @@
 #include <stdint.h>
 #include "ST7735.h"
 #include "tm4c123gh6pm.h"
+#include "OS.h"
 
 // 16 rows (0 to 15) and 21 characters (0 to 20)
 // Requires (11 + size*size*6*8) bytes of transmission for each character
@@ -1614,12 +1615,21 @@ void Output_Color(uint32_t newColor){ // Set color of future output
 
 // ************** Self-created functions *************
 
+static Sema4Type lcd_lock;
+void LCD_Init(){
+	ST7735_InitR(INITR_REDTAB);
+	ST7735_FillScreen(0x0000);
+	ST7735_DrawFastHLine(0, 80, 128, 0xffe0);
+	OS_InitSemaphore(&lcd_lock, 1);
+}
+
 /*
  *  device: 0 for top screen, 1 for bottom screen
  *	line: 0 - 3
  */
 
 void ST7735_Message (int device, int line, char *string, int32_t value) {
+	OS_bWait(&lcd_lock);
 	int y = 1;
 	switch (device) {
 	case (0) :  // row 0 - 7
@@ -1647,13 +1657,8 @@ void ST7735_Message (int device, int line, char *string, int32_t value) {
 	break;
 	default	 :;
 	}
-
-	// need to fix this
-	if (*string) {  // print string
-		ST7735_DrawString(1, y, string, StTextColor);
-	}
-	else {  // print number
-		ST7735_SetCursor(10, y);
-		ST7735_OutUDec(value);
-	}
+	ST7735_SetCursor(0,y);
+	ST7735_OutString(string);
+	ST7735_OutUDec(value);
+	OS_bSignal(&lcd_lock);
 }

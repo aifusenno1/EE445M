@@ -9,6 +9,8 @@
 #include "LED.h"
 #include "PLL.h"
 #include "Serial.h"
+#include "ST7735.h"
+
 
 void OS_DisableInterrupts(void); // Disable interrupts
 void OS_EnableInterrupts(void);  // Enable interrupts
@@ -50,6 +52,8 @@ void OS_Init(void){
   OS_DisableInterrupts();	  // disable all processor interrupt; will be enabled in OS_Launch
   PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
   Serial_Init();
+  LED_Init();
+  LCD_Init();
   os_timer_init();
 
   NVIC_ST_CTRL_R = 0;         // disable SysTick during setup
@@ -160,7 +164,9 @@ void threadScheduler(void) {
 	do {
 		RunPt = RunPt->next;
 	} while (RunPt->state == SLEEP);
-//    Serial_println("s%u",RunPt->id);
+#ifdef DEBUG
+//	LED_BLUE_TOGGLE();
+#endif
 }
 
 // ******** OS_Sleep ************
@@ -232,7 +238,6 @@ static void os_timer_init() {
 	TIMER3_ICR_R = 0x00000001;    // 6) clear TIMER3A timeout flag
 	TIMER3_IMR_R = 0x00000001;    // 7) arm timeout interrupt
 	NVIC_PRI8_R = (NVIC_PRI8_R&0x00FFFFFF)|0x20000000; // 8) priority 1
-
 	// vector number 51, interrupt number 35
 	NVIC_EN1_R = 1<<(35-32);      // 9) enable IRQ 35 in NVIC
 	TIMER3_CTL_R = 0x00000001;    // 10) enable TIMER3A
@@ -264,7 +269,7 @@ void Timer3A_Handler(void){
 // It is ok to change the resolution and precision of this function as long as
 //   this function and OS_TimeDifference have the same resolution and precision
 unsigned long OS_Time(void) {
-	return OS_Timer * OS_PERIOD + (OS_PERIOD - 1 - TIMER3_TAILR_R);  // the right part is the elapsed cycles that yet counted into OS_Timer
+	return OS_Timer * OS_PERIOD + (OS_PERIOD - 1 - TIMER3_TAR_R);  // the right part is the elapsed cycles that yet counted into OS_Timer
 }
 // ******** OS_TimeDifference ************
 // Calculates difference between two times
@@ -278,7 +283,7 @@ unsigned long OS_TimeDifference(unsigned long start, unsigned long stop) {
 	if (dif >= 0)
 		return dif;
 	else
-		return 4294967296 - dif;
+		return 0xFFFFFFFF - dif + 1;
 }
 
 // ******** OS_ClearMsTime ************
@@ -288,7 +293,7 @@ unsigned long OS_TimeDifference(unsigned long start, unsigned long stop) {
 // You are free to change how this works
 void OS_ClearMsTime(void) {
 	OS_Timer = 0;
-	TIMER3_TAILR_R = OS_PERIOD - 1;
+	TIMER3_TAR_R = OS_PERIOD - 1;	// reload the counter
 }
 
 // ******** OS_MsTime ************
@@ -538,10 +543,8 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 
 void Timer1A_Handler(void){
 	TIMER1_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
-//	LED_BLUE_ON();
 	periodic_tasks[0]();                // execute user task
 	periodic_counters[0]++;
-//	LED_BLUE_OFF();
 }
 
 static void (*sw1_task)(void);
@@ -644,7 +647,6 @@ int OS_AddSW2Task(void(*task)(void), unsigned long priority) {
 }
 
 static void sw1_debounce(void) {
-//	LED_GREEN_TOGGLE();
 	OS_Sleep(10);
 	lastPF4 = PF4 & 0x10;		// lastPF4 reflects the state of switch after debounce
 	GPIO_PORTF_ICR_R = 0x10;
@@ -663,7 +665,10 @@ static void sw2_debounce(void) {
 
 void GPIOPortF_Handler(void) {  // negative logic
 	if (GPIO_PORTF_RIS_R & 0x10) {  // if PF4 pressed
-
+#ifdef DEBUG
+//		LED_GREEN_TOGGLE();
+//		LED_GREEN_TOGGLE();
+#endif
 		GPIO_PORTF_IM_R &= ~0x10;	// disarm interrupt on PF4, debounce purpose
 		if (lastPF4) {             	// 0x10 means it was previously released, negative logic
 			sw1_task();
@@ -674,6 +679,9 @@ void GPIOPortF_Handler(void) {  // negative logic
 			GPIO_PORTF_ICR_R = 0x10;
 			GPIO_PORTF_IM_R |= 0x10;
 		}
+#ifdef DEBUG
+//		LED_GREEN_TOGGLE();
+#endif
 	}
 	if (GPIO_PORTF_RIS_R & 0x01) { // if PF0 pressed
 		GPIO_PORTF_IM_R &= ~0x01;

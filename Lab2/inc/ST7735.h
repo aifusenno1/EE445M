@@ -457,7 +457,12 @@ void Output_On(void);
 // Output: none
 void Output_Color(uint32_t newColor);
 
+
 // ************** Self-created functions *************
+/*
+ * Initialization of LCD
+ */
+void LCD_Init(void);
 /*
  * Divide the LCD into two logical partitions and provide
  * an interface to output a string and an integer
