@@ -234,7 +234,7 @@ preloop_v7:
 //   3. Comment all the TableFFT_V7 data.
 //------------------------------------------------------------------------------
        // ADRL    pssK, TableFFT_V7    // Coeff in Flash
-        LDR     pssK, TableFFT_V7
+        ADR     pssK, TableFFT_V7
         //LDR.W pssK, =TableFFT      // Coeff in RAM
 
 //................................

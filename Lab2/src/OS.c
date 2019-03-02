@@ -4,20 +4,12 @@
  */
 
 
-#include <OS.h>
+#include "OS.h"
 #include "tm4c123gh6pm.h"
 #include "LED.h"
 #include "PLL.h"
 #include "Serial.h"
 #include "ST7735.h"
-
-
-void OS_DisableInterrupts(void); // Disable interrupts
-void OS_EnableInterrupts(void);  // Enable interrupts
-long StartCritical (void);    // previous I bit, disable interrupts
-void EndCritical(long sr);    // restore I bit to previous value
-void StartOS(void);
-static void os_timer_init(void);
 
 #define PE0  (*((volatile unsigned long *)0x40024004))
 #define PE1  (*((volatile unsigned long *)0x40024008))
@@ -33,7 +25,7 @@ static void os_timer_init(void);
 #define NUMTHREADS  10        // maximum number of threads
 #define STACKSIZE   100      // number of 32-bit words in stack
 
-unsigned long OS_Timer;	   // in unit of 1ms by default
+static unsigned long OS_Timer;	   // in unit of 1ms by default
 
 static int32_t Stacks[NUMTHREADS][STACKSIZE];
 tcbType *RunPt;
@@ -41,6 +33,9 @@ static tcbType tcbs[NUMTHREADS];
 static uint32_t threadCnt;
 static int nextID = 0;
 static tcbType *lastThread;
+
+void StartOS(void);
+static void os_timer_init(void);
 
 
 // ******** OS_Init ************
@@ -116,7 +111,10 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 	}
 	else {
 		int slot = findFreeThreadSlot();
-		if (slot == -1) return 0;
+		if (slot == -1)  {
+			EndCritical(sr);
+			return 0;
+		}
 
 		// keeping both next and prev helps relinking when a thread dies
 		tcbs[slot].next = lastThread->next;
@@ -248,7 +246,6 @@ static void os_timer_init() {
 void Timer3A_Handler(void){
 	TIMER3_ICR_R = TIMER_ICR_TATOCINT;// acknowledge TIMER3A timeout
 //	  LED_GREEN_ON();
-//	Serial_println("1 %u", NVIC_ST_CURRENT_R);
 	OS_Timer++;
 	// decrement all sleeping threads
 	for (int i=0; i<NUMTHREADS; i++) {
@@ -279,11 +276,10 @@ unsigned long OS_Time(void) {
 // It is ok to change the resolution and precision of this function as long as
 //   this function and OS_Time have the same resolution and precision
 unsigned long OS_TimeDifference(unsigned long start, unsigned long stop) {
-	unsigned long dif = stop - start;
-	if (dif >= 0)
-		return dif;
+	if (stop >= start)
+		return stop - start;
 	else
-		return 0xFFFFFFFF - dif + 1;
+		return  4294967296 - (start - stop);
 }
 
 // ******** OS_ClearMsTime ************
@@ -417,6 +413,7 @@ unsigned long OS_MailBox_Recv(void) {
 	OS_bWait(&mb_DataValid);  // wait until mailbox data is filled
 	ret = mailbox;
 	OS_bSignal(&mb_BoxFree);  // signal that mailbox is now free
+	return ret;
 }
 
 #define OS_FIFO_SIZE 16
@@ -425,6 +422,7 @@ volatile uint32_t *putPt;
 static uint32_t fifo[OS_FIFO_SIZE];
 static Sema4Type ff_DataNum;
 //static Sema4Type ff_mutex;		// mutex not needed, because only one consumer
+
 // ******** OS_Fifo_Init ************
 // Initialize the Fifo to be empty
 // Inputs: size
@@ -437,7 +435,6 @@ static Sema4Type ff_DataNum;
 void OS_Fifo_Init(unsigned long size) {
 	putPt = getPt = &fifo[0];
 	OS_InitSemaphore(&ff_DataNum, 0);
-//	OS_InitSemaphore(&ff_mutex, 1);		// initially released
 }
 
 // ******** OS_Fifo_Put ************
@@ -450,13 +447,21 @@ void OS_Fifo_Init(unsigned long size) {
 //  this function can not disable or enable interrupts
 int OS_Fifo_Put(unsigned long data) {
 	// only one background producer thread, no critical section
-	if (ff_DataNum.value == OS_FIFO_SIZE) {  // full
-		return 0;  // data lost
+	/*
+	 * Notice here, cannot just use semaphore.value to check whether it's full or not
+	 * because in Get, DataNum may be decremented, then it's switched out or interrupted by Put
+	 * before the data is actually recorded. Thus we need to make sure FIFO is never full
+	 */
+	uint32_t volatile *nextPutPt;
+	nextPutPt = putPt+1;
+	if(nextPutPt == &fifo[OS_FIFO_SIZE]){
+		nextPutPt = &fifo[0];  // wrap
+	}
+	if(nextPutPt == getPt){
+		return 0;      // Failed, fifo full; Since cannot wait here (in ISR)
 	}
 	*putPt = data;
-	putPt++;
-	if (putPt == &fifo[OS_FIFO_SIZE])
-		putPt = &fifo[0];
+	putPt = nextPutPt;
 	OS_Signal(&ff_DataNum);		// increment current data number
 	return 1;
 }
@@ -467,13 +472,14 @@ int OS_Fifo_Put(unsigned long data) {
 // Inputs:  none
 // Outputs: data
 unsigned long OS_Fifo_Get(void) {
-	OS_Wait(&ff_DataNum);	   // decrement current data number; if empty, spin or block
-//	OS_Wait(&ff_mutex);		   // wait until other consumer thread finishes, then lock
+	OS_Wait(&ff_DataNum);	    // decrement current data number; if empty, spin or block
+								// wait until other consumer thread finishes, then lock
 	unsigned long data = *getPt;
+	OS_DisableInterrupts();     // make the getPt increment process atomic
 	getPt++;
 	if (getPt == &fifo[OS_FIFO_SIZE])
 		getPt = &fifo[0];
-//	OS_Signal(&ff_mutex);	   // release lock
+	OS_EnableInterrupts();
 	return data;
 }
 
@@ -484,7 +490,12 @@ unsigned long OS_Fifo_Get(void) {
 //          greater than zero if a call to OS_Fifo_Get will return right away
 //          zero or less than zero if the Fifo is empty
 //          zero or less than zero if a call to OS_Fifo_Get will spin or block
-long OS_Fifo_Size(void);
+long OS_Fifo_Size(void) {
+	if(putPt < getPt){
+		return ((unsigned short)(putPt-getPt+(OS_FIFO_SIZE*sizeof(uint32_t)))/sizeof(uint32_t));
+	}
+	return ((unsigned short)(putPt-getPt)/sizeof(uint32_t));
+}
 
 
 #define PERIODIC_NUM 1
@@ -664,6 +675,7 @@ static void sw2_debounce(void) {
 }
 
 void GPIOPortF_Handler(void) {  // negative logic
+	unsigned long sr = StartCritical();
 	if (GPIO_PORTF_RIS_R & 0x10) {  // if PF4 pressed
 #ifdef DEBUG
 //		LED_GREEN_TOGGLE();
@@ -694,4 +706,5 @@ void GPIOPortF_Handler(void) {  // negative logic
 			GPIO_PORTF_IM_R |= 0x01;
 		}
 	}
+	EndCritical(sr);
 }

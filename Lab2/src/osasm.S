@@ -26,10 +26,10 @@ SysTick_Handler:   .func       // 1) Saves R0-R3,R12,LR,PC,PSR
     CPSID   I                  // 2) Prevent interrupt during switch
     PUSH    {R4-R11}           // 3) Save remaining regs r4-11
 #ifdef DEBUG
-	PUSH    {R0,LR}
-	BL		LED_RED_TOGGLE
-	BL		LED_RED_TOGGLE
-	POP		{R0,LR}
+//	PUSH    {R0,LR}
+//	BL		LED_RED_TOGGLE
+//	BL		LED_RED_TOGGLE
+//	POP		{R0,LR}
 #endif
     LDR     R0, =RunPt          // 4) R0=pointer to RunPt, old thread
     LDR     R1, [R0]           //    R1 = RunPt
@@ -40,9 +40,9 @@ SysTick_Handler:   .func       // 1) Saves R0-R3,R12,LR,PC,PSR
     LDR		R1, [R0]		   // R1 = RunPt (update)
     LDR     SP, [R1]           // 7) new thread SP; SP = RunPt->sp;
 #ifdef DEBUG
-    PUSH    {R0,LR}
-	BL		LED_RED_TOGGLE
-	POP		{R0,LR}
+//    PUSH    {R0,LR}
+//	BL		LED_RED_TOGGLE
+//	POP		{R0,LR}
 #endif
     POP     {R4-R11}           // 8) restore regs r4-11
     CPSIE   I                  // 9) tasks run with interrupts enabled

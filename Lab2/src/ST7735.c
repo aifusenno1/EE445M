@@ -93,6 +93,7 @@
 #include "ST7735.h"
 #include "tm4c123gh6pm.h"
 #include "OS.h"
+#include "string.h"
 
 // 16 rows (0 to 15) and 21 characters (0 to 20)
 // Requires (11 + size*size*6*8) bytes of transmission for each character
@@ -1628,7 +1629,8 @@ void LCD_Init(){
  *	line: 0 - 3
  */
 
-void ST7735_Message (int device, int line, char *string, int32_t value) {
+void ST7735_Message (int device, int line, char *str, int32_t value) {
+
 	OS_bWait(&lcd_lock);
 	int y = 1;
 	switch (device) {
@@ -1658,7 +1660,7 @@ void ST7735_Message (int device, int line, char *string, int32_t value) {
 	default	 :;
 	}
 	ST7735_SetCursor(0,y);
-	ST7735_OutString(string);
+	ST7735_OutString(str);
 	ST7735_OutUDec(value);
 	OS_bSignal(&lcd_lock);
 }

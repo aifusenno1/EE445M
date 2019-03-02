@@ -19,6 +19,11 @@
 #define TIME_500US  (TIME_1MS/2)
 #define TIME_250US  (TIME_1MS/5)
 
+void OS_DisableInterrupts(void); // Disable interrupts
+void OS_EnableInterrupts(void);  // Enable interrupts
+unsigned long StartCritical(void);    // previous I bit, disable interrupts
+void EndCritical(unsigned long sr);    // restore I bit to previous value
+
 enum State {
 		FREE,
 		ACTIVE,
@@ -26,16 +31,18 @@ enum State {
 		BLOCKED
 };
 
-// feel free to change the type of semaphore, there are lots of good solutions
 typedef struct Sema4{
   long value;   // > 0 means free, otherwise means busy
 // add other components here, if necessary to implement blocking
 } Sema4Type;
 
 
+/*
+ *	Thread Control Block structure
+ */
 typedef struct tcb {
-	uint32_t *sp;         // ** MUST be the first field ** saved stack pointer (not used by active thread)
-	struct tcb *next;	  // ** MUST be the second field
+	int32_t *sp;         // ** MUST be the first field ** saved stack pointer (not used by active thread)
+	struct tcb *next;	 // ** MUST be the second field
 	struct tcb *prev;
 	enum State state;
 	int id;
@@ -44,8 +51,8 @@ typedef struct tcb {
 //	uint32_t priority;
 } tcbType;
 
-extern tcbType *RunPt;
 
+extern tcbType *RunPt;
 
 
 // ******** OS_Init ************
@@ -284,11 +291,10 @@ unsigned long OS_MsTime(void);
 // It is ok to limit the range of theTimeSlice to match the 24-bit SysTick
 void OS_Launch(unsigned long theTimeSlice);
 
-
-void OS_ClearPeriodicTime(void);
-
-uint32_t OS_ReadPeriodicTime(void);
-
-void threadScheduler(void);
+///*
+// * Thread Scheduler
+// * Finds the next thread to run
+// */
+//void threadScheduler(void);
 
 #endif /* INC_OS_H_ */

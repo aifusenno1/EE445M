@@ -157,6 +157,7 @@ unsigned long input;
 #endif
 //--------------end of Task 1-----------------------------
 
+
 //------------------Task 2--------------------------------
 // I/O bound? Fixed Bandwidth?
 // background thread executes with SW1 button
@@ -178,9 +179,7 @@ unsigned long myId = OS_Id();
   OS_Sleep(50);     // set this to sleep for 50msec
   ST7735_Message(1,1,"PIDWork     = ",PIDWork);
   ST7735_Message(1,2,"DataLost    = ",DataLost);
-  ST7735_Message(1,3,"Jitter 0.1us = ",MaxJitter);
-//  ST7735_Message(0,3,"OSTAT = ",(ADC0_OSTAT_R & 0x04)>> 2);
-
+  ST7735_Message(1,3,"Jitter = ",MaxJitter);
 #ifdef DEBUG
   PE1 ^= 0x02;
 #endif
@@ -253,14 +252,15 @@ unsigned long myId = OS_Id();
   NumCreated += OS_AddThread(&Display,128,0);
   while(NumSamples < RUNLENGTH) {
 #ifdef DEBUG
-    PE2 = 0x00;
+//    PE2 = 0x00;
 #endif
     for(t = 0; t < 64; t++){   // collect 64 ADC samples
       data = OS_Fifo_Get();    // get from producer
+      PE2 ^= 0x04;
       x[t] = data;             // real part is 0 to 4095, imaginary part is 0
     }
 #ifdef DEBUG
-    PE2 = 0x04;
+//    PE2 = 0x04;
 #endif
     cr4_fft_64_stm32(y,x,64);  // complex FFT of last 64 ADC values
     DCcomponent = y[0]&0xFFFF; // Real part at frequency 0, imaginary part should be zero
@@ -291,6 +291,7 @@ unsigned long data,voltage;
 }
 
 //--------------end of Task 3-----------------------------
+extern unsigned long volatile TxPutI;// put next
 
 //------------------Task 4--------------------------------
 // CPU bound
@@ -314,11 +315,18 @@ unsigned long myId = OS_Id();
   Coeff[0] = 384;   // 1.5 = 384/256 proportional coefficient
   Coeff[1] = 128;   // 0.5 = 128/256 integral coefficient
   Coeff[2] = 64;    // 0.25 = 64/256 derivative coefficient*
+  unsigned long this, last = 0;
   while(NumSamples < RUNLENGTH) {
+	this = OS_Time();
+//	Serial_println("%u, %u, %u", last, this, OS_TimeDifference(last, this));
+//	static uint32_t num = 1000000;
+//	Serial_println("%u %u %u", num++, num++, num++);
+
     for(err = -1000; err <= 1000; err++){    // made-up data
       Actuator = PID_stm32(err,Coeff)/256;
     }
     PIDWork++;        // calculation finished
+    last = this;
   }
   for(;;){ }          // done
 }
@@ -349,7 +357,7 @@ void interpreter(void);    // just a prototype, link to your interpreter
 
 
 //*******************final user main DEMONTRATE THIS TO TA**********
-int main(void){
+int main(void){    // realmain
   OS_Init();           // initialize, disable interrupts
   PortE_Init();
 
@@ -521,7 +529,7 @@ void Thread2c(void){
   for(;;){
     OS_Wait(&Readyc);
     Count2++;   // Count2 + Count5 should equal Count1
-    Serial_println("%u %u %u", Count1, Count2, Count5);
+//    Serial_println("%u %u %u", Count1, Count2, Count5);
   }
 }
 
@@ -551,9 +559,7 @@ void BackgroundThread5c(void){   // called when Select button pushed
 int Testmain3(void){   // Testmain3
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
-  Serial_Init();
   PortE_Init();
-  LED_Init();
 
 // Count2 + Count5 should equal Count1
   NumCreated = 0 ;
@@ -595,7 +601,7 @@ void Thread2d(void){
   for(;;){
     OS_bWait(&Readyd);
     Count2++;
-    Serial_println("%u %u %u", Count1, Count2, Count3);
+    Serial_println("%u %u %u %u", Count1, Count2, Count3, Count4);
   }
 }
 void Thread3d(void){
@@ -609,7 +615,7 @@ void Thread4d(void){ int i;
     Count4++;
     OS_Sleep(1);
   }
-//  Serial_println("%u", Count4);
+//  Serial_println("Count4 = %u", Count4);
   OS_Kill();
 }
 void BackgroundThread5d(void){   // called when Select button pushed
@@ -618,9 +624,7 @@ void BackgroundThread5d(void){   // called when Select button pushed
 int Testmain4(void){   // Testmain4
   Count4 = 0;
   OS_Init();           // initialize, disable interrupts
-  Serial_Init();
   PortE_Init();
-  LED_Init();
 
   NumCreated = 0 ;
   OS_AddPeriodicThread(&BackgroundThread1d,PERIOD,0);

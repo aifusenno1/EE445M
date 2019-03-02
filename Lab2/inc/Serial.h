@@ -114,6 +114,7 @@ void Serial_OutUHex(uint32_t number);
 // -- Modified by Agustinus Darmawan + Mingjie Qiu --
 void Serial_InString(char *bufPt, uint16_t max);
 
+void Serial_printf(char *format, ...);
 
 void Serial_println(char *format, ...);
 
