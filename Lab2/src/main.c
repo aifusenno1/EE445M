@@ -32,8 +32,8 @@
 #include "LED.h"
 
 
-#define Lab2 1
-#define Lab3 0
+#define Lab2 0
+#define Lab3 1
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
 //*********Prototype for PID in PID_stm32.s, STMicroelectronics
@@ -109,12 +109,10 @@ long jitter;                    // time between measured and expected, in us
   if(NumSamples < RUNLENGTH){   // finite time run
 #ifdef DEBUG
     PE0 ^= 0x01;
-//    LED_GREEN_TOGGLE();
 #endif
     input = ADC_In();           // channel set when calling ADC_Init
 #ifdef DEBUG
     PE0 ^= 0x01;
-//    LED_GREEN_TOGGLE();
 #endif
     thisTime = OS_Time();       // current time, 12.5 ns
     DASoutput = Filter(input);
@@ -137,7 +135,6 @@ long jitter;                    // time between measured and expected, in us
     LastTime = thisTime;
 #ifdef DEBUG
     PE0 ^= 0x01;
-//    LED_GREEN_TOGGLE();
 #endif
   }
 }
