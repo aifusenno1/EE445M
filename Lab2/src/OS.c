@@ -498,11 +498,10 @@ long OS_Fifo_Size(void) {
 }
 
 
-#define PERIODIC_NUM 2
+#define PERIODIC_NUM 1
 static void (*periodic_tasks[PERIODIC_NUM])(void);   // user function
 static int periodic_num = 0;
 static uint32_t periodic_counters[PERIODIC_NUM];
-static uint32_t periodic_periods[PERIODIC_NUM];
 
 //******** OS_AddPeriodicThread ***************
 // add a background periodic task
@@ -526,7 +525,6 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 	if (periodic_num < PERIODIC_NUM) {
 		periodic_tasks[periodic_num] = task;
 		periodic_counters[periodic_num] = 0;
-		periodic_periods[periodic_num] = period;
 		if (periodic_num == 0) {
 			SYSCTL_RCGCTIMER_R |= 0x02;   // 0) activate TIMER1
 			TIMER1_CTL_R = 0x00000000;    // 1) disable TIMER1A during setup
@@ -542,19 +540,7 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 			NVIC_EN0_R = 1<<21;           // 9) enable IRQ 21 in NVIC
 			TIMER1_CTL_R = 0x00000001;    // 10) enable TIMER1A
 		} else if (periodic_num == 1) {
-			SYSCTL_RCGCTIMER_R |= 0x02;   // 0) activate TIMER1
-			TIMER0_CTL_R = 0x00000000;    // 1) disable TIMER0A during setup
-			  TIMER0_CFG_R = 0x00000000;    // 2) configure for 32-bit mode
-			  TIMER0_TAMR_R = 0x00000002;   // 3) configure for periodic mode, default down-count settings
-			  TIMER0_TAILR_R = period-1;    // 4) reload value
-			  TIMER0_TAPR_R = 0;            // 5) bus clock resolution
-			  TIMER0_ICR_R = 0x00000001;    // 6) clear TIMER0A timeout flag
-			  TIMER0_IMR_R = 0x00000001;    // 7) arm timeout interrupt
-			  NVIC_PRI4_R = (NVIC_PRI4_R&0x00FFFFFF)| (priority << 29); // 8) priority
-			  // interrupts enabled in the main program after all devices initialized
-			  // vector number 35, interrupt number 19
-			  NVIC_EN0_R = 1<<19;           // 9) enable IRQ 19 in NVIC
-			  TIMER0_CTL_R = 0x00000001;    // 10) enable TIMER0A
+
 		}
 		periodic_num++;
 		EndCritical(sr);
@@ -565,58 +551,11 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 	}
 }
 
-#define JITTERSIZE 64
-unsigned long jitter1;
-unsigned long jitter1Histogram[JITTERSIZE]={0,};
-unsigned long jitter2;
-unsigned long jitter2Histogram[JITTERSIZE]={0,};
 
 void Timer1A_Handler(void){
-	static unsigned long lastTime;
-	static unsigned long maxJitter = 0;
 	TIMER1_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
-	unsigned long thisTime = OS_Time();       // current time, 12.5 ns
-
 	periodic_tasks[0]();                // execute user task
 	periodic_counters[0]++;
-	if(periodic_counters[0]>1){    // ignore timing of first interrupt
-		unsigned long diff = OS_TimeDifference(lastTime, thisTime);
-		if (diff > periodic_periods[0])
-			jitter1 = (diff-periodic_periods[0]+4)/8;  // in 0.1 usec
-		else
-			jitter1 = (periodic_periods[0]-diff+4)/8;  // in 0.1 usec
-		if(jitter1 > maxJitter)
-			maxJitter = jitter1; // in usec
-		// jitter should be 0
-		if(jitter1 >= JITTERSIZE)
-			jitter1 = JITTERSIZE-1;
-		Jitter1Histogram[jitter1]++;
-	}
-	lastTime = thisTime;
-}
-
-void Timer0A_Handler(void){
-	static unsigned long lastTime;
-	static unsigned long maxJitter = 0;
-	TIMER0_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
-	unsigned long thisTime = OS_Time();       // current time, 12.5 ns
-
-	periodic_tasks[1]();                // execute user task
-	periodic_counters[1]++;
-	if(periodic_counters[1]>1){    // ignore timing of first interrupt
-		unsigned long diff = OS_TimeDifference(lastTime, thisTime);
-		if (diff > periodic_periods[1])
-			jitter2 = (diff-periodic_periods[1]+4)/8;  // in 0.1 usec
-		else
-			jitter2 = (periodic_periods[1]-diff+4)/8;  // in 0.1 usec
-		if(jitter2 > maxJitter)
-			maxJitter = jitter2; // in usec
-		// jitter should be 0
-		if(jitter2 >= JITTERSIZE)
-			jitter2 = JITTERSIZE-1;
-		Jitter2Histogram[jitter2]++;
-	}
-	lastTime = thisTime;
 }
 
 static void (*sw1_task)(void);
@@ -769,4 +708,3 @@ void GPIOPortF_Handler(void) {  // negative logic
 	}
 	EndCritical(sr);
 }
-2

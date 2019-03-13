@@ -32,8 +32,8 @@
 #include "LED.h"
 
 
-#define Lab2 0
-#define Lab3 1
+#define Lab2 1
+#define Lab3 0
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
 //*********Prototype for PID in PID_stm32.s, STMicroelectronics

@@ -22,7 +22,6 @@
 #define TIME_250US  (TIME_1MS/5)
 #define OS_PERIOD   TIME_1MS  // period of OS_Timer, in unit of 12.5ns (cycles)
 
-#define NUMTHREADS  10        // maximum number of threads
 #define STACKSIZE   100      // number of 32-bit words in stack
 
 static unsigned long OS_Timer;	   // in unit of 1ms by default
@@ -105,6 +104,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		tcbs[0].prev = &tcbs[0];
 		tcbs[0].id = nextID++;
 		tcbs[0].state = ACTIVE;
+		tcbs[0].priority = priority;
 		setInitialStack(0, task);
 		lastThread = &tcbs[0];
 		RunPt = &tcbs[0];
@@ -126,6 +126,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		setInitialStack(slot, task);
 		tcbs[slot].id = nextID++;
 		tcbs[slot].state = ACTIVE;
+		tcbs[slot].priority = priority;
 	}
 //	Serial_println("%u", threadCnt);
 	threadCnt++;
@@ -159,9 +160,27 @@ unsigned long OS_Id(void) {
 
 // schedules the next thread to run
 void threadScheduler(void) {
+	tcbType * pt = RunPt;
+	tcbType * startPt;
+	// whether this thread is killed
+	if (RunPt->state == FREE) {
+		startPt = RunPt->next;
+	}
+	else {
+		startPt = RunPt;
+	}
+	tcbType * bestPt;
+	int maxPri = 255;
+
 	do {
-		RunPt = RunPt->next;
-	} while (RunPt->state == SLEEP);
+		pt = pt->next;
+		if (pt->state == ACTIVE && pt->priority < maxPri) {
+			maxPri = pt->priority;
+			bestPt = pt;
+		}
+	} while (pt != startPt);
+	RunPt = bestPt;
+
 #ifdef DEBUG
 //	LED_BLUE_TOGGLE();
 #endif
@@ -250,8 +269,9 @@ void Timer3A_Handler(void){
 	// decrement all sleeping threads
 	for (int i=0; i<NUMTHREADS; i++) {
 		if (tcbs[i].state == SLEEP) {
-			if (--tcbs[i].sleepTimeLeft == 0)
+			if (--tcbs[i].sleepTimeLeft == 0) {
 				tcbs[i].state = ACTIVE;
+			}
 		}
 	}
 //	  LED_GREEN_OFF();
@@ -308,6 +328,8 @@ unsigned long OS_MsTime(void) {
 // output: none
 void OS_InitSemaphore(Sema4Type *semaPt, long value) {
 	semaPt->value = value;
+	semaPt->start = 0;
+	semaPt->end = 0;
 }
 
 /* Wait can only be called by main thread, because suspend (thread switch) only applies to main threads */
@@ -318,13 +340,16 @@ void OS_InitSemaphore(Sema4Type *semaPt, long value) {
 // input:  pointer to a counting semaphore
 // output: none
 void OS_Wait(Sema4Type *semaPt) {
-	OS_DisableInterrupts();   // why not save I bit here?
-	while (semaPt->value == 0) {
-		OS_EnableInterrupts();
-		OS_Suspend();				// run thread switch
-		OS_DisableInterrupts();
-	}
+	OS_DisableInterrupts();
 	semaPt->value = semaPt->value - 1;
+	if (semaPt->value < 0) {
+		RunPt->state = BLOCKED;
+		RunPt->blocked = semaPt;
+		semaPt->waiters[semaPt->end] = RunPt;  // add to waiters list
+		semaPt->end = (semaPt->end + 1) % NUMTHREADS;
+		OS_EnableInterrupts();
+		OS_Suspend();
+	}
 	OS_EnableInterrupts();
 }
 
@@ -335,8 +360,13 @@ void OS_Wait(Sema4Type *semaPt) {
 // input:  pointer to a counting semaphore
 // output: none
 void OS_Signal(Sema4Type *semaPt) {
-	unsigned long sr = StartCritical();  // why save I bit here?
+	unsigned long sr = StartCritical();
+	tcbType *pt = RunPt;
 	semaPt->value = semaPt->value + 1;
+	if (semaPt->value <= 0) {
+		semaPt->waiters[semaPt->start]->state = ACTIVE;		// release the first blocked thread
+		semaPt->start = (semaPt->start + 1) % NUMTHREADS;
+	}
 	EndCritical(sr);
 }
 
@@ -347,24 +377,17 @@ void OS_Signal(Sema4Type *semaPt) {
 // input:  pointer to a binary semaphore
 // output: none
 void OS_bWait(Sema4Type *semaPt) {
-//	OS_DisableInterrupts();
-//	semaPt->value = semaPt->value - 1;
-//	if (semaPt->value < 0) {
-//		RunPt->blocked = semaPt;
-//		RunPt->state = BLOCKED;
-//		OS_EnableInterrupts();
-//		OS_Suspend();				// run thread switch
-//	}
-//	OS_EnableInterrupts();
 	OS_DisableInterrupts();
-	while (semaPt->value == 0) {    // if it's 0, need to wait for other thread to signal it (set it)
-		OS_EnableInterrupts();		// if it's 1, meaning already signaled (or maybe initially not acquired)
-		OS_Suspend();				// run thread switch
-		OS_DisableInterrupts();
+	while (semaPt->value == 0) {
+		RunPt->state = BLOCKED;
+		RunPt->blocked = semaPt;
+		semaPt->waiters[semaPt->end] = RunPt;  // add to waiters list
+		semaPt->end = (semaPt->end + 1) % NUMTHREADS;
+		OS_EnableInterrupts();
+		OS_Suspend();
 	}
 	semaPt->value = 0;    // write zero back to it, prepared for usage next time
 	OS_EnableInterrupts();
-
 }
 
 // ******** OS_bSignal ************
@@ -374,6 +397,10 @@ void OS_bWait(Sema4Type *semaPt) {
 // output: none
 void OS_bSignal(Sema4Type *semaPt) {
     unsigned long sr = StartCritical();  // why save I bit here?
+    if (semaPt->value == 0) {
+    	semaPt->waiters[semaPt->start]->state = ACTIVE;		// release the first blocked thread
+    	semaPt->start = (semaPt->start + 1) % NUMTHREADS;
+    }
 	semaPt->value = 1;
     EndCritical(sr);
 }
@@ -498,10 +525,17 @@ long OS_Fifo_Size(void) {
 }
 
 
-#define PERIODIC_NUM 1
+#define PERIODIC_NUM 2
 static void (*periodic_tasks[PERIODIC_NUM])(void);   // user function
 static int periodic_num = 0;
 static uint32_t periodic_counters[PERIODIC_NUM];
+static uint32_t periodic_periods[PERIODIC_NUM];
+
+unsigned long NumSamples;
+unsigned long maxJitter1;   // in 0.1us units
+unsigned long maxJitter2;
+static unsigned long jitter1Histogram[JITTERSIZE]={0,};
+static unsigned long jitter2Histogram[JITTERSIZE]={0,};
 
 //******** OS_AddPeriodicThread ***************
 // add a background periodic task
@@ -525,7 +559,9 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 	if (periodic_num < PERIODIC_NUM) {
 		periodic_tasks[periodic_num] = task;
 		periodic_counters[periodic_num] = 0;
+		periodic_periods[periodic_num] = period;
 		if (periodic_num == 0) {
+			maxJitter1 = 0;
 			SYSCTL_RCGCTIMER_R |= 0x02;   // 0) activate TIMER1
 			TIMER1_CTL_R = 0x00000000;    // 1) disable TIMER1A during setup
 			TIMER1_CFG_R = 0x00000000;    // 2) configure for 32-bit mode
@@ -540,7 +576,21 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 			NVIC_EN0_R = 1<<21;           // 9) enable IRQ 21 in NVIC
 			TIMER1_CTL_R = 0x00000001;    // 10) enable TIMER1A
 		} else if (periodic_num == 1) {
+			maxJitter2 = 0;
+			SYSCTL_RCGCTIMER_R |= 0x01;   // 0) activate TIMER0
+			TIMER0_CTL_R = 0x00000000;    // 1) disable TIMER0A during setup
+			TIMER0_CFG_R = 0x00000000;    // 2) configure for 32-bit mode
+			TIMER0_TAMR_R = 0x00000002;   // 3) configure for periodic mode, default down-count settings
+			TIMER0_TAILR_R = period-1;    // 4) reload value
+			TIMER0_TAPR_R = 0;            // 5) bus clock resolution
+			TIMER0_ICR_R = 0x00000001;    // 6) clear TIMER0A timeout flag
+			TIMER0_IMR_R = 0x00000001;    // 7) arm timeout interrupt
 
+			NVIC_PRI4_R = (NVIC_PRI4_R&0x00FFFFFF)| (priority << 29); // 8) priority
+			// interrupts enabled in the main program after all devices initialized
+			// vector number 35, interrupt number 19
+			NVIC_EN0_R = 1<<19;           // 9) enable IRQ 19 in NVIC
+			TIMER0_CTL_R = 0x00000001;    // 10) enable TIMER0A
 		}
 		periodic_num++;
 		EndCritical(sr);
@@ -551,11 +601,65 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 	}
 }
 
+void print_jitter(void) {
+//	ST7735_Message(1,0,"Jitter 1 = ", maxJitter1);
+//	ST7735_Message(1,1,"Jitter 2 = ", maxJitter2);
+	Serial_println("Periodic Task 1 jitter (0.1 us): %u", maxJitter1);
+	Serial_println("Periodic Task 2 jitter (0.1 us): %u", maxJitter2);
+}
 
 void Timer1A_Handler(void){
+	static unsigned long lastTime;
+	unsigned long jitter;
 	TIMER1_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
-	periodic_tasks[0]();                // execute user task
-	periodic_counters[0]++;
+	unsigned long thisTime;
+
+	if (NumSamples < RUNLENGTH) {
+		thisTime= OS_Time();       // current time, 12.5 ns
+
+		periodic_tasks[0]();                // execute user task
+		periodic_counters[0]++;
+		if(periodic_counters[0]>1){    // ignore timing of first interrupt
+			unsigned long diff = OS_TimeDifference(lastTime, thisTime);
+			if (diff > periodic_periods[0])
+				jitter = (diff-periodic_periods[0]+4)/8;  // in 0.1 usec
+			else
+				jitter = (periodic_periods[0]-diff+4)/8;  // in 0.1 usec
+			if(jitter > maxJitter1)
+				maxJitter1 = jitter; // in usec
+			// jitter should be 0
+			if(jitter >= JITTERSIZE)
+				jitter = JITTERSIZE-1;
+			jitter1Histogram[jitter]++;
+		}
+		lastTime = thisTime;
+	}
+}
+
+void Timer0A_Handler(void){
+	static unsigned long lastTime;
+	unsigned long jitter;
+	TIMER0_ICR_R = TIMER_ICR_TATOCINT;  // acknowledge
+	unsigned long thisTime;
+	if (NumSamples < RUNLENGTH) {
+		thisTime = OS_Time();       // current time, 12.5 ns
+		periodic_tasks[1]();                // execute user task
+		periodic_counters[1]++;
+		if(periodic_counters[1]>1){    // ignore timing of first interrupt
+			unsigned long diff = OS_TimeDifference(lastTime, thisTime);
+			if (diff > periodic_periods[1])
+				jitter = (diff-periodic_periods[1]+4)/8;  // in 0.1 usec
+			else
+				jitter = (periodic_periods[1]-diff+4)/8;  // in 0.1 usec
+			if(jitter > maxJitter2)
+				maxJitter2 = jitter; // in usec
+			// jitter should be 0
+			if(jitter >= JITTERSIZE)
+				jitter = JITTERSIZE-1;
+			jitter2Histogram[jitter]++;
+		}
+		lastTime = thisTime;
+	}
 }
 
 static void (*sw1_task)(void);
@@ -662,7 +766,6 @@ static void sw1_debounce(void) {
 	lastPF4 = PF4 & 0x10;		// lastPF4 reflects the state of switch after debounce
 	GPIO_PORTF_ICR_R = 0x10;
 	GPIO_PORTF_IM_R |= 0x10;
-//	LED_GREEN_TOGGLE();
 	OS_Kill();	// only one time usage, so kill right away
 }
 
@@ -677,10 +780,6 @@ static void sw2_debounce(void) {
 void GPIOPortF_Handler(void) {  // negative logic
 	unsigned long sr = StartCritical();
 	if (GPIO_PORTF_RIS_R & 0x10) {  // if PF4 pressed
-#ifdef DEBUG
-//		LED_GREEN_TOGGLE();
-//		LED_GREEN_TOGGLE();
-#endif
 		GPIO_PORTF_IM_R &= ~0x10;	// disarm interrupt on PF4, debounce purpose
 		if (lastPF4) {             	// 0x10 means it was previously released, negative logic
 			sw1_task();
@@ -691,9 +790,6 @@ void GPIOPortF_Handler(void) {  // negative logic
 			GPIO_PORTF_ICR_R = 0x10;
 			GPIO_PORTF_IM_R |= 0x10;
 		}
-#ifdef DEBUG
-//		LED_GREEN_TOGGLE();
-#endif
 	}
 	if (GPIO_PORTF_RIS_R & 0x01) { // if PF0 pressed
 		GPIO_PORTF_IM_R &= ~0x01;

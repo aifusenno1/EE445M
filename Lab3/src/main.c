@@ -32,8 +32,8 @@
 #include "LED.h"
 
 
-#define Lab2 1
-#define Lab3 0
+#define Lab2 0
+#define Lab3 1
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
 //*********Prototype for PID in PID_stm32.s, STMicroelectronics
@@ -42,9 +42,8 @@ short PID_stm32(short Error, short *Coeff);
 unsigned long NumCreated;   // number of foreground threads created
 unsigned long PIDWork;      // current number of PID calculations finished
 unsigned long FilterWork;   // number of digital filter calculations finished
-unsigned long NumSamples;   // incremented every ADC sample, in Producer
-#define FS 400              // producer/consumer sampling
-#define RUNLENGTH (20*FS)   // display results and quit when NumSamples==RUNLENGTH
+extern unsigned long NumSamples;   // incremented every ADC sample, in Producer
+
 // 20-sec finite time experiment duration
 
 #define PERIOD TIME_500US   // DAS 2kHz sampling period in system time units
@@ -165,21 +164,24 @@ unsigned long input;
 // foreground treads run for 2 sec and die
 // ***********ButtonWork*************
 #if Lab3
-extern unsigned long MaxJitter;
+extern unsigned long maxJitter1;
+extern unsigned long maxJitter2;
 #endif
 void ButtonWork(void){
 unsigned long myId = OS_Id();
 #ifdef DEBUG
   PE1 ^= 0x02;
 #endif
-  ST7735_Message(1,0,"NumCreated = ",NumCreated);
+  ST7735_Message(0,3,"NumCreated = ",NumCreated);
 #ifdef DEBUG
   PE1 ^= 0x02;
 #endif
   OS_Sleep(50);     // set this to sleep for 50msec
-  ST7735_Message(1,1,"PIDWork     = ",PIDWork);
-  ST7735_Message(1,2,"DataLost    = ",DataLost);
-  ST7735_Message(1,3,"Jitter = ",MaxJitter);
+  ST7735_Message(1,0,"PIDWork     = ",PIDWork);
+  ST7735_Message(1,1,"DataLost    = ",DataLost);
+  ST7735_Message(1,2,"Jitter 1 = ",maxJitter1);
+  ST7735_Message(1,3,"Jitter 2 = ",maxJitter2);
+
 #ifdef DEBUG
   PE1 ^= 0x02;
 #endif
@@ -252,15 +254,14 @@ unsigned long myId = OS_Id();
   NumCreated += OS_AddThread(&Display,128,0);
   while(NumSamples < RUNLENGTH) {
 #ifdef DEBUG
-//    PE2 = 0x00;
+    PE2 = 0x00;
 #endif
     for(t = 0; t < 64; t++){   // collect 64 ADC samples
       data = OS_Fifo_Get();    // get from producer
-      PE2 ^= 0x04;
       x[t] = data;             // real part is 0 to 4095, imaginary part is 0
     }
 #ifdef DEBUG
-//    PE2 = 0x04;
+    PE2 = 0x04;
 #endif
     cr4_fft_64_stm32(y,x,64);  // complex FFT of last 64 ADC values
     DCcomponent = y[0]&0xFFFF; // Real part at frequency 0, imaginary part should be zero
@@ -318,10 +319,6 @@ unsigned long myId = OS_Id();
   unsigned long this, last = 0;
   while(NumSamples < RUNLENGTH) {
 	this = OS_Time();
-//	Serial_println("%u, %u, %u", last, this, OS_TimeDifference(last, this));
-//	static uint32_t num = 1000000;
-//	Serial_println("%u %u %u", num++, num++, num++);
-
     for(err = -1000; err <= 1000; err++){    // made-up data
       Actuator = PID_stm32(err,Coeff)/256;
     }
@@ -357,13 +354,12 @@ void interpreter(void);    // just a prototype, link to your interpreter
 
 
 //*******************final user main DEMONTRATE THIS TO TA**********
-int main(void){    // realmain
+int realmain(void){    // realmain
   OS_Init();           // initialize, disable interrupts
   PortE_Init();
 
   DataLost = 0;        // lost data between producer and consumer
   NumSamples = 0;
-  MaxJitter = 0;       // in 1us units
 
 //********initialize communication channels
   OS_MailBox_Init();
@@ -384,7 +380,7 @@ int main(void){    // realmain
   NumCreated += OS_AddThread(&Consumer,128,1);
   NumCreated += OS_AddThread(&PID,128,3);  // Lab 3, make this lowest priority
 
-  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+  OS_Launch(TIME_2MS*5); // doesn't return, interrupts enabled in here
   return 0;            // this never executes
 }
 
@@ -529,7 +525,7 @@ void Thread2c(void){
   for(;;){
     OS_Wait(&Readyc);
     Count2++;   // Count2 + Count5 should equal Count1
-//    Serial_println("%u %u %u", Count1, Count2, Count5);
+    Serial_println("%u %u %u", Count1, Count2, Count5);
   }
 }
 
@@ -653,6 +649,7 @@ void ConsumerThread8(void){
     }
     Expected8 = OtherCount1+1; // should be sequential
     Count2++;
+//    Serial_println("%u %u %u", Count1, Count2, Count3);
   }
 }
 void FillerThread8(void){
@@ -668,8 +665,10 @@ void BackgroundThread8Producer(void){   // called periodically
   Count1++;
 }
 int Testmain8(void){   // Testmain8
-  Count1 = 0;     DataLost = 0;
-  Expected8 = 0;  Error8 = 0;
+  Count1 = 0;
+  DataLost = 0;
+  Expected8 = 0;
+  Error8 = 0;
   OS_Init();           // initialize, disable interrupts
   NumCreated = 0 ;
   OS_AddPeriodicThread(&BackgroundThread8Producer,PERIOD,0);
@@ -698,6 +697,10 @@ unsigned long Count1;   // number of times thread1 loops
 // simple time delay, simulates user program doing real work
 // Input: amount of work in 100ns units (free free to change units
 // Output: none
+
+extern unsigned long maxJitter1;   // in 1us units
+extern unsigned long maxJitter2;
+
 void PseudoWork(unsigned long work){
 unsigned long startTime;
   startTime = OS_Time();    // time in 100ns units
@@ -710,16 +713,16 @@ void Thread6(void){  // foreground thread
     PE0 ^= 0x01;        // debugging toggle bit 0
   }
 }
-extern void Jitter(void);   // prints jitter information (write this)
+extern void print_jitter(void);   // prints jitter information (write this)
 void Thread7(void){  // foreground thread
-  Serial_OutString("\n\rEE345M/EE380L, Lab 3 Preparation 2\n\r");
-  OS_Sleep(5000);   // 10 seconds
-  Jitter();         // print jitter information
+  Serial_OutString("\n\rEE445M, Lab 3 Preparation 2\n\r");
+  OS_Sleep(10000);   // 10 seconds
+  print_jitter();         // print jitter information
   Serial_OutString("\n\r\n\r");
   OS_Kill();
 }
 #define workA 500       // {5,50,500 us} work in Task A
-#define counts1us 10    // number of OS_Time counts per 1us
+#define counts1us 80    // number of OS_Time counts per 1us
 void TaskA(void){       // called every {1000, 2990us} in background
   PE1 = 0x02;      // debugging profile
   CountA++;
@@ -740,7 +743,7 @@ int Testmain5(void){       // Testmain5 Lab 3
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread6,128,2);
   NumCreated += OS_AddThread(&Thread7,128,1);
-  OS_AddPeriodicThread(&TaskA,TIME_1MS,0);           // 1 ms, higher priority
+  OS_AddPeriodicThread(&TaskA,3*TIME_1MS - 1,0);           // 1 ms, higher priority
   OS_AddPeriodicThread(&TaskB,2*TIME_1MS,1);         // 2 ms, lower priority
 
   OS_Launch(TIME_2MS); // 2ms, doesn't return, interrupts enabled in here
@@ -764,29 +767,39 @@ unsigned long SignalCount3;   // number of times s is signaled
 unsigned long WaitCount1;     // number of times s is successfully waited on
 unsigned long WaitCount2;     // number of times s is successfully waited on
 unsigned long WaitCount3;     // number of times s is successfully waited on
-#define MAXCOUNT 20000
+#define MAXCOUNT 200
 void OutputThread(void){  // foreground thread
-  Serial_OutString("\n\rEE445M/EE380L, Lab 3 Preparation 4\n\r");
+//  Serial_OutString("\n\rEE445M/EE380L, Lab 3 Preparation 4\n\r");
+  Serial_printf("\nEE445M/EE380L, Lab 3 Preparation 4\n");
   while(SignalCount1+SignalCount2+SignalCount3<100*MAXCOUNT){
+	  	PE1 ^= 0x02;
     OS_Sleep(1000);   // 1 second
-    Serial_OutString(".");
+    PE1 ^= 0x02;
+//    Serial_OutString(".");
+    Serial_printf(".");
   }
-  Serial_OutString(" done\n\r");
-  Serial_OutString("Signalled="); Serial_OutUDec(SignalCount1+SignalCount2+SignalCount3);
-  Serial_OutString(", Waited="); Serial_OutUDec(WaitCount1+WaitCount2+WaitCount3);
-  Serial_OutString("\n\r");
+  Serial_printf(" done\n");
+  Serial_printf("Signaled="); Serial_printf("%u",SignalCount1+SignalCount2+SignalCount3);
+  Serial_printf(", Waited="); Serial_printf("%u",WaitCount1+WaitCount2+WaitCount3);
+  Serial_printf("\n");
   OS_Kill();
 }
 void Wait1(void){  // foreground thread
   for(;;){
+	    PE3 ^= 0x08;
+
     OS_Wait(&s);    // three threads waiting
     WaitCount1++;
+    PE3 ^= 0x08;
+
   }
 }
 void Wait2(void){  // foreground thread
   for(;;){
+	    PE2 ^= 0x04;
     OS_Wait(&s);    // three threads waiting
     WaitCount2++;
+    PE2 ^= 0x04;
   }
 }
 void Wait3(void){   // foreground thread
@@ -821,7 +834,7 @@ static long result;
   result = m+n;
   return result;
 }
-int Testmain6(void){      // Testmain6  Lab 3
+int main(void){      // Testmain6  Lab 3
   volatile unsigned long delay;
   OS_Init();           // initialize, disable interrupts
   delay = add(3,4);

@@ -19,6 +19,12 @@
 #define TIME_500US  (TIME_1MS/2)
 #define TIME_250US  (TIME_1MS/5)
 
+#define NUMTHREADS  10        // maximum number of threads
+
+#define FS 400              // producer/consumer sampling
+#define RUNLENGTH (20*FS)   // display results and quit when NumSamples==RUNLENGTH
+#define JITTERSIZE 64
+
 void OS_DisableInterrupts(void); // Disable interrupts
 void OS_EnableInterrupts(void);  // Enable interrupts
 unsigned long StartCritical(void);    // previous I bit, disable interrupts
@@ -31,11 +37,14 @@ enum State {
 		BLOCKED
 };
 
+typedef struct tcb tcbType;
+
 typedef struct Sema4{
   long value;   // > 0 means free, otherwise means busy
-// add other components here, if necessary to implement blocking
+  tcbType *waiters[NUMTHREADS];  // the threads waiting on this sema
+  int start;                     // the start index of waiters
+  int end;					 	 // the end index of waiters
 } Sema4Type;
-
 
 /*
  *	Thread Control Block structure
@@ -47,8 +56,8 @@ typedef struct tcb {
 	enum State state;
 	int id;
 	uint32_t sleepTimeLeft;    // number of cycles left the thread needs to remain in sleep state
-	Sema4Type *blocked;
-//	uint32_t priority;
+	Sema4Type *blocked;        // the semaphore it is blocked on
+	int32_t priority;
 } tcbType;
 
 
