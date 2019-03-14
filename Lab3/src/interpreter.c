@@ -9,7 +9,7 @@
 
 static void parse_lcd(char cmd[][20], int len);
 static void parse_led(char cmd[][20], int len);
-
+void parse_jitter(char cmd[][20], int len);
 char input[200];
 
 void interpreter(void) {
@@ -70,6 +70,11 @@ void interpreter(void) {
 		if (strcmp(command[0], "led") == 0) {
 			parse_led(command, len);
 		}
+
+		if (strcmp(command[0], "jitter") == 0) {
+			parse_jitter(command, len);
+		}
+
 		else {
 			Serial_println("Unrecognized command.");
 		}
@@ -138,5 +143,15 @@ static void parse_led(char cmd[][20], int len) {
 		Serial_println("Unrecognized argument.");
 	}
 //	EndCritical(sr);
+}
+
+
+extern unsigned long jitter1Histogram[JITTERSIZE];
+
+void parse_jitter(char cmd[][20], int len) {
+	for (int i =0; i < JITTERSIZE; i++) {
+		Serial_println("%u %u", i, jitter1Histogram[i] );
+	}
+
 }
 

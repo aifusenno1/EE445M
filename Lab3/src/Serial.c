@@ -273,6 +273,8 @@ void Serial_OutUHex(uint32_t number){
 // Output: Null terminated string
 // -- Modified by Agustinus Darmawan + Mingjie Qiu --
 void Serial_InString(char *bufPt, uint16_t max) {
+//	OS_bWait(&serial_lock);
+
 	int length=0;
 	char character;
 	character = Serial_InChar();
@@ -293,7 +295,7 @@ void Serial_InString(char *bufPt, uint16_t max) {
 		character = Serial_InChar();
 	}
 	*bufPt = 0;
-
+//	OS_bSignal(&serial_lock);
 }
 
 

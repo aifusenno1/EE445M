@@ -197,7 +197,7 @@ void SW1Push(void){
     if(OS_AddThread(&ButtonWork,100,2)){
       NumCreated++;
     }
-    OS_ClearMsTime();  // at least 20ms between touches
+//    OS_ClearMsTime();  // at least 20ms between touches
   }
 }
 //************SW2Push*************
@@ -209,7 +209,7 @@ void SW2Push(void){
     if(OS_AddThread(&ButtonWork,100,2)){
       NumCreated++;
     }
-    OS_ClearMsTime();  // at least 20ms between touches
+//    OS_ClearMsTime();  // at least 20ms between touches
   }
 }
 //--------------end of Task 2-----------------------------
@@ -246,6 +246,7 @@ void Display(void);
 // calculates FFT, sends DC component to Display
 // inputs:  none
 // outputs: none
+
 void Consumer(void){
 unsigned long data,DCcomponent;   // 12-bit raw ADC sample, 0 to 4095
 unsigned long t;                  // time in 2.5 ms
@@ -354,7 +355,7 @@ void interpreter(void);    // just a prototype, link to your interpreter
 
 
 //*******************final user main DEMONTRATE THIS TO TA**********
-int realmain(void){    // realmain
+int main(void){        // realmain
   OS_Init();           // initialize, disable interrupts
   PortE_Init();
 
@@ -378,9 +379,9 @@ int realmain(void){    // realmain
 // create initial foreground threads
   NumCreated += OS_AddThread(&interpreter,128,2);
   NumCreated += OS_AddThread(&Consumer,128,1);
-  NumCreated += OS_AddThread(&PID,128,3);  // Lab 3, make this lowest priority
+  NumCreated += OS_AddThread(&PID,128,2);  // Lab 3, make this lowest priority
 
-  OS_Launch(TIME_2MS*5); // doesn't return, interrupts enabled in here
+  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
   return 0;            // this never executes
 }
 
@@ -767,15 +768,14 @@ unsigned long SignalCount3;   // number of times s is signaled
 unsigned long WaitCount1;     // number of times s is successfully waited on
 unsigned long WaitCount2;     // number of times s is successfully waited on
 unsigned long WaitCount3;     // number of times s is successfully waited on
-#define MAXCOUNT 200
+#define MAXCOUNT 20000
 void OutputThread(void){  // foreground thread
 //  Serial_OutString("\n\rEE445M/EE380L, Lab 3 Preparation 4\n\r");
   Serial_printf("\nEE445M/EE380L, Lab 3 Preparation 4\n");
   while(SignalCount1+SignalCount2+SignalCount3<100*MAXCOUNT){
-	  	PE1 ^= 0x02;
+//	  	PE1 ^= 0x02;
     OS_Sleep(1000);   // 1 second
-    PE1 ^= 0x02;
-//    Serial_OutString(".");
+//    PE1 ^= 0x02;
     Serial_printf(".");
   }
   Serial_printf(" done\n");
@@ -785,56 +785,54 @@ void OutputThread(void){  // foreground thread
   OS_Kill();
 }
 void Wait1(void){  // foreground thread
-  for(;;){
-	    PE3 ^= 0x08;
-
-    OS_Wait(&s);    // three threads waiting
-    WaitCount1++;
-    PE3 ^= 0x08;
-
-  }
+	for(;;){
+		PE3 ^= 0x08;
+		OS_Wait(&s);    // three threads waiting
+		WaitCount1++;
+		PE3 ^= 0x08;
+	}
 }
 void Wait2(void){  // foreground thread
-  for(;;){
-	    PE2 ^= 0x04;
-    OS_Wait(&s);    // three threads waiting
-    WaitCount2++;
-    PE2 ^= 0x04;
-  }
+	for(;;){
+		PE2 ^= 0x04;
+		OS_Wait(&s);    // three threads waiting
+		WaitCount2++;
+		PE2 ^= 0x04;
+	}
 }
 void Wait3(void){   // foreground thread
-  for(;;){
-    OS_Wait(&s);    // three threads waiting
-    WaitCount3++;
-  }
+	for(;;){
+		OS_Wait(&s);    // three threads waiting
+		WaitCount3++;
+	}
 }
 void Signal1(void){      // called every 799us in background
-  if(SignalCount1<MAXCOUNT){
-    OS_Signal(&s);
-    SignalCount1++;
-  }
+	if(SignalCount1<MAXCOUNT){
+		OS_Signal(&s);
+		SignalCount1++;
+	}
 }
 // edit this so it changes the periodic rate
 void Signal2(void){       // called every 1111us in background
-  if(SignalCount2<MAXCOUNT){
-    OS_Signal(&s);
-    SignalCount2++;
-  }
+	if(SignalCount2<MAXCOUNT){
+		OS_Signal(&s);
+		SignalCount2++;
+	}
 }
 void Signal3(void){       // foreground
-  while(SignalCount3<98*MAXCOUNT){
-    OS_Signal(&s);
-    SignalCount3++;
-  }
-  OS_Kill();
+	while(SignalCount3<98*MAXCOUNT){
+		OS_Signal(&s);
+		SignalCount3++;
+	}
+	OS_Kill();
 }
 
 long add(const long n, const long m){
-static long result;
-  result = m+n;
-  return result;
+	static long result;
+	result = m+n;
+	return result;
 }
-int main(void){      // Testmain6  Lab 3
+int Testmain6(void){      // Testmain6  Lab 3
   volatile unsigned long delay;
   OS_Init();           // initialize, disable interrupts
   delay = add(3,4);
@@ -879,7 +877,6 @@ void Thread8(void){       // only thread running
 int Testmain7(void){       // Testmain7
   PortE_Init();
   OS_Init();           // initialize, disable interrupts
-  LED_Init();
 
   NumCreated = 0 ;
   NumCreated += OS_AddThread(&Thread8,128,2);

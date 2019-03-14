@@ -22,11 +22,11 @@
 #define TIME_250US  (TIME_1MS/5)
 #define OS_PERIOD   TIME_1MS  // period of OS_Timer, in unit of 12.5ns (cycles)
 
-#define STACKSIZE   100      // number of 32-bit words in stack
+#define STACKSIZE   500      // number of 32-bit words in stack
 
 static unsigned long OS_Timer;	   // in unit of 1ms by default
 
-static int32_t Stacks[NUMTHREADS][STACKSIZE];
+int32_t Stacks[NUMTHREADS][STACKSIZE];
 tcbType *RunPt;
 static tcbType tcbs[NUMTHREADS];
 static uint32_t threadCnt;
@@ -57,11 +57,11 @@ void OS_Init(void){
 
 // notice R13 (MSP/PSP) not stored in stack
 static void setInitialStack(int i, void (*thread_starting_addr)(void)){
-  tcbs[i].sp = &Stacks[i][STACKSIZE-16]; // thread stack pointer, initially pointing to the bottom
+  tcbs[i].sp = &Stacks[i][STACKSIZE-16]; // thread stack pointer, initially pointing to the bottom (above all registers)
   Stacks[i][STACKSIZE-1] = 0x01000000;   // thumb bit (PSR)
   Stacks[i][STACKSIZE-2] = (int32_t) thread_starting_addr;  // PC
   Stacks[i][STACKSIZE-3] = 0x14141414;   // R14 (LR)
-  Stacks[i][STACKSIZE-4] = 0x12121212;   // R12
+  Stacks[i][STACKSIZE-4] = 0x12121212;   // R12  SP
   Stacks[i][STACKSIZE-5] = 0x03030303;   // R3
   Stacks[i][STACKSIZE-6] = 0x02020202;   // R2
   Stacks[i][STACKSIZE-7] = 0x01010101;   // R1
@@ -161,13 +161,13 @@ unsigned long OS_Id(void) {
 // schedules the next thread to run
 void threadScheduler(void) {
 	tcbType * pt = RunPt;
-	tcbType * startPt;
+	tcbType * endPt;  // endPt is the last thread to check in the Linked List
 	// whether this thread is killed
 	if (RunPt->state == FREE) {
-		startPt = RunPt->next;
+		endPt = RunPt->prev;
 	}
 	else {
-		startPt = RunPt;
+		endPt = RunPt;
 	}
 	tcbType * bestPt;
 	int maxPri = 255;
@@ -178,7 +178,7 @@ void threadScheduler(void) {
 			maxPri = pt->priority;
 			bestPt = pt;
 		}
-	} while (pt != startPt);
+	} while (pt != endPt);
 	RunPt = bestPt;
 
 #ifdef DEBUG
@@ -534,8 +534,8 @@ static uint32_t periodic_periods[PERIODIC_NUM];
 unsigned long NumSamples;
 unsigned long maxJitter1;   // in 0.1us units
 unsigned long maxJitter2;
-static unsigned long jitter1Histogram[JITTERSIZE]={0,};
-static unsigned long jitter2Histogram[JITTERSIZE]={0,};
+unsigned long jitter1Histogram[JITTERSIZE]={0,};
+unsigned long jitter2Histogram[JITTERSIZE]={0,};
 
 //******** OS_AddPeriodicThread ***************
 // add a background periodic task
