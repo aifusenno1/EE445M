@@ -1,11 +1,11 @@
-#include <stdint.h>
 #include <stdarg.h>
 #include "tm4c123gh6pm.h"
 
 #include "FIFO.h"
 #include "Serial.h"
 #include "LED.h"
-#include "OS.h"
+//#include <stdio.h>
+#include "eFile.h"
 
 
 #define NVIC_EN0_INT5           0x00000020  // Interrupt 5 enable
@@ -37,7 +37,9 @@
 #define FIFOSUCCESS 1         // return value on success
 #define FIFOFAIL    0         // return value on failure
                               // create index implementation FIFO (see FIFO.h)
-static Sema4Type serial_lock;
+
+int outstream;
+Sema4Type output_lock;
 
 // Initialize UART0
 // Baud rate is 115200 bits/sec
@@ -65,7 +67,8 @@ void Serial_Init(void){
   GPIO_PORTA_AMSEL_R = 0;               // disable analog functionality on PA
   NVIC_PRI1_R = (NVIC_PRI1_R&0xFFFF00FF)|0x00004000; // bits 13-15  UART0 = priority 2
   NVIC_EN0_R = NVIC_EN0_INT5;           // enable interrupt 5 in NVIC
-  OS_InitSemaphore(&serial_lock, 1);
+  outstream = UART_STREAM;
+  OS_InitSemaphore(&output_lock, 1);
 
 }
 
@@ -137,17 +140,6 @@ void UART0_Handler(void){
   }
 }
 
-//------------Serial_OutString------------
-// Output String (NULL termination)
-// Input: pointer to a NULL-terminated string to be transferred
-// Output: none
-void Serial_OutString(char *pt){
-  while(*pt){
-	  Serial_OutChar(*pt);
-    pt++;
-  }
-}
-
 //------------Serial_InUDec------------
 // InUDec accepts ASCII input in unsigned decimal format
 //     and converts to a 32-bit unsigned number
@@ -180,20 +172,6 @@ uint32_t Serial_InUDec(void){
 	return number;
 }
 
-//-----------------------Serial_OutUDec-----------------------
-// Output a 32-bit number in unsigned decimal format
-// Input: 32-bit number to be transferred
-// Output: none
-// Variable format 1-10 digits with no space before or after
-void Serial_OutUDec(uint32_t n){
-	// This function uses recursion to convert decimal number
-	//   of unspecified length as an ASCII string
-	if(n >= 10){
-		Serial_OutUDec(n/10);
-		n = n%10;
-	}
-	Serial_OutChar(n+'0'); /* n is between 0 and 9 */
-}
 
 //---------------------Serial_InUHex----------------------------------------
 // Accepts ASCII input in unsigned hexadecimal (base 16) format
@@ -237,27 +215,6 @@ uint32_t Serial_InUHex(void){
 	return number;
 }
 
-//--------------------------Serial_OutUHex----------------------------
-// Output a 32-bit number in unsigned hexadecimal format
-// Input: 32-bit number to be transferred
-// Output: none
-// Variable format 1 to 8 digits with no space before or after
-void Serial_OutUHex(uint32_t number){
-	// This function uses recursion to convert the number of
-	//   unspecified length as an ASCII string
-	if(number >= 0x10){
-		Serial_OutUHex(number/0x10);
-		Serial_OutUHex(number%0x10);
-	}
-	else{
-		if(number < 0xA){
-			Serial_OutChar(number+'0');
-		}
-		else{
-			Serial_OutChar((number-0x0A)+'A');
-		}
-	}
-}
 
 
 //------------Serial_InString------------
@@ -298,59 +255,79 @@ void Serial_InString(char *bufPt, uint16_t max) {
 //	OS_bSignal(&serial_lock);
 }
 
+typedef struct __FILE {
+	int dummy;
+} FILE;
 
 
-//-----------Serial_println-------------
-// C stdio style println
-// automatically insrt the newline and carriage return at the end
-// input: format string and arguments
-// output: none
-void Serial_println(char *format, ...) {
-	/*
-	 * Reason to lock here:
-	 * to preserve the order of a series of Serial_println call by different threads
-	 */
+FILE __stdout; // supposed to be able to access self-defined members in __FILE, but cannot for some reason
 
-	OS_bWait(&serial_lock);
-	va_list ap;
-	va_start(ap, format);
-
-	while (*format != '\0') {
-		if (*format == '%') {
-			format++;
-			switch (*format) {
-			case 'u' :
-			case 'U' :
-				Serial_OutUDec(va_arg(ap, uint32_t));
-				break;
-			case 's' :
-			case 'S' :
-				Serial_OutString(va_arg(ap, char *));
-				break;
-			case 'c' :
-			case 'C' :
-				Serial_OutChar(va_arg(ap, int));
-				break;
-			case 'x' :
-			case 'X' :
-				Serial_OutUHex(va_arg(ap, uint32_t));
-				break;
-			}
+int fputc(int ch, FILE *f) {
+	switch (outstream) {
+	case UART_STREAM :
+		Serial_OutChar(ch);
+		break;
+	case FILE_STREAM :
+		if (eFile_Write(ch) != EFILE_SUCCESS) {
+			eFile_EndRedirectToFile();
+			return 1;  // not sure what to return
 		}
-		else {
-			Serial_OutChar(*format);
-		}
-		format++;
+		break;
 	}
-	va_end(ap);
-	Serial_OutChar(LF);
-	Serial_OutChar(CR);
-	OS_bSignal(&serial_lock);
+
+	return ch;
 }
 
 
-void Serial_printf(char *format, ...) {
-	OS_bWait(&serial_lock);
+// Output String (NULL termination)
+// Input: pointer to a NULL-terminated string to be transferred
+// Output: none
+void outString(char *pt){
+  while(*pt){
+	  fputc(*pt, &__stdout);
+    pt++;
+  }
+}
+
+
+// Output a 32-bit number in unsigned decimal format
+// Input: 32-bit number to be transferred
+// Output: none
+// Variable format 1-10 digits with no space before or after
+void outUDec(uint32_t n){
+	// This function uses recursion to convert decimal number
+	//   of unspecified length as an ASCII string
+	if(n >= 10){
+		outUDec(n/10);
+		n = n%10;
+	}
+	fputc(n+'0', &__stdout); /* n is between 0 and 9 */
+}
+
+// Output a 32-bit number in unsigned hexadecimal format
+// Input: 32-bit number to be transferred
+// Output: none
+// Variable format 1 to 8 digits with no space before or after
+void outUHex(uint32_t number){
+	// This function uses recursion to convert the number of
+	//   unspecified length as an ASCII string
+	if(number >= 0x10){
+		outUHex(number/0x10);
+		outUHex(number%0x10);
+	}
+	else{
+		if(number < 0xA){
+			fputc(number+'0', &__stdout);
+		}
+		else{
+			fputc((number-0x0A)+'A', &__stdout);
+		}
+	}
+}
+
+
+void printf (const char *format, ...) {
+	OS_bWait(&output_lock);
 	va_list ap;
 	va_start(ap, format);
 
@@ -360,32 +337,36 @@ void Serial_printf(char *format, ...) {
 			switch (*format) {
 			case 'u' :
 			case 'U' :
-				Serial_OutUDec(va_arg(ap, uint32_t));
+				outUDec(va_arg(ap, uint32_t));
 				break;
 			case 's' :
 			case 'S' :
-				Serial_OutString(va_arg(ap, char *));
+				outString(va_arg(ap, char *));
 				break;
 			case 'c' :
 			case 'C' :
-				Serial_OutChar(va_arg(ap, int));
+				fputc(va_arg(ap, int), &__stdout);
 				break;
 			case 'x' :
 			case 'X' :
-				Serial_OutUHex(va_arg(ap, uint32_t));
+				outUHex(va_arg(ap, uint32_t));
 				break;
 			}
 		}
 		else {
 			if (*format == '\n') {
-				Serial_OutChar(LF);
-				Serial_OutChar(CR);
+				fputc(LF, &__stdout);
+				fputc(CR, &__stdout);
 			}
 			else
-				Serial_OutChar(*format);
+				fputc(*format, &__stdout);
 		}
 		format++;
 	}
 	va_end(ap);
-	OS_bSignal(&serial_lock);
+	OS_bSignal(&output_lock);
+
 }
+
+
+

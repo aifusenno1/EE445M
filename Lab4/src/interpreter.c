@@ -14,11 +14,11 @@ char input[200];
 
 void interpreter(void) {
 	while (1) {
-		Serial_printf("$ ");
+		printf("$ ");
 
 		Serial_InString(input, 30);  // 200 will not work for some reason
 
-		Serial_println("");
+		printf("\n");
 
 		char *c = &input[0];
 
@@ -35,7 +35,7 @@ void interpreter(void) {
 				while (*c != '"') {
 					if (*c == '\0') {
 //						OS_EnableInterrupts();
-						Serial_println("Closing quote not found.");
+						printf("Closing quote not found.\n");
 						goto END_OF_LOOP;  // due to error, jump out of the current input
 					}
 					command[len][i++] = *c++;
@@ -76,7 +76,7 @@ void interpreter(void) {
 		}
 
 		else {
-			Serial_println("Unrecognized command.");
+			printf("Unrecognized command.\n");
 		}
 		END_OF_LOOP : ;
 	}
@@ -91,13 +91,13 @@ static void parse_lcd(char cmd[][20], int len) {
 //	Serial_OutUDec(len);
 //	long sr = StartCritical();
 	if (len == 1) {
-		Serial_println("lcd: need at least an argument.");
+		printf("lcd: need at least an argument.\n");
 		return;
 	}
 
 	if (!strcmp(cmd[1], "message")) {
 		if (len < 5) {
-			Serial_println("lcd message: insufficient arguments.");
+			printf("lcd message: insufficient arguments.\n");
 			return;
 		}
 
@@ -106,19 +106,19 @@ static void parse_lcd(char cmd[][20], int len) {
 
 		// if device arg is not an integer
 		if ((strlen(cmd[2]) != 1 || cmd[2][0] != '0') && device == 0) {
-			Serial_println("lcd message: incorrect arguments.");
+			printf("lcd message: incorrect arguments.\n");
 			return;
 		}
 
 		if ((strlen(cmd[3]) != 1 || cmd[3][0] != '0') && line == 0) {
-			Serial_println("lcd message: incorrect arguments.");
+			printf("lcd message: incorrect arguments.\n");
 			return;
 		}
 
 		ST7735_Message(device, line, cmd[4], 0);
 	}
 	else {
-		Serial_println("Unrecognized argument.");
+		printf("Unrecognized argument.\n");
 	}
 //	EndCritical(sr);
 }
@@ -128,7 +128,7 @@ static void parse_lcd(char cmd[][20], int len) {
 static void parse_led(char cmd[][20], int len) {
 //	long sr = StartCritical();
 	if (len == 1) {
-		Serial_println("led: need at least an argument.");
+		printf("led: need at least an argument.\n");
 		return;
 	}
 
@@ -140,7 +140,7 @@ static void parse_led(char cmd[][20], int len) {
 		LED_BLUE_TOGGLE();
 	}
 	else {
-		Serial_println("Unrecognized argument.");
+		printf("Unrecognized argument.\n");
 	}
 //	EndCritical(sr);
 }
@@ -150,7 +150,7 @@ extern unsigned long jitter1Histogram[JITTERSIZE];
 
 void parse_jitter(char cmd[][20], int len) {
 	for (int i =0; i < JITTERSIZE; i++) {
-		Serial_println("%u %u", i, jitter1Histogram[i] );
+		printf("%u %u\n", i, jitter1Histogram[i] );
 	}
 
 }

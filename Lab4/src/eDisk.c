@@ -51,14 +51,18 @@
 // SDO  � (NC) I2C alternate address for ADXL345 accelerometer
 // Backlight + - Light, backlight connected to +3.3 V
 #include <stdint.h>
-#include "../inc/tm4c123gh6pm.h"
+#include "tm4c123gh6pm.h"
 #include "edisk.h"
+#include "OS.h"
+#include "LED.h"
 
 #define SDC_CS_PB0 1
 #define SDC_CS_PD7 0
 #define TFT_CS                  (*((volatile unsigned long *)0x40004020))
 #define TFT_CS_LOW              0           // CS normally controlled by hardware
 #define TFT_CS_HIGH             0x08
+
+extern Sema4Type ssi_lock;
 
 #if SDC_CS_PD7
 // CS is PD7
@@ -99,6 +103,30 @@ void CS_Init(void){
 }
 #endif
 
+void Timer5_Init(void){volatile unsigned short delay;
+  SYSCTL_RCGCTIMER_R |= 0x20;
+  delay = SYSCTL_SCGCTIMER_R;
+  delay = SYSCTL_SCGCTIMER_R;
+  TIMER5_CTL_R = 0x00000000;       // 1) disable timer5A during setup
+  TIMER5_CFG_R = 0x00000000;       // 2) configure for 32-bit mode
+  TIMER5_TAMR_R = 0x00000002;      // 3) configure for periodic mode, default down-count settings
+  TIMER5_TAILR_R = 799999;         // 4) reload value, 10 ms, 80 MHz clock
+  TIMER5_TAPR_R = 0;               // 5) bus clock resolution
+  TIMER5_ICR_R = 0x00000001;       // 6) clear timer5A timeout flag
+  TIMER5_IMR_R = 0x00000001;       // 7) arm timeout interrupt
+  NVIC_PRI23_R = (NVIC_PRI23_R&0xFFFFFF00)|0x00000040; // 8) priority 2
+// interrupts enabled in the main program after all devices initialized
+// vector number 108, interrupt number 92
+  NVIC_EN2_R = 0x10000000;         // 9) enable interrupt 92 in NVIC
+  TIMER5_CTL_R = 0x00000001;       // 10) enable timer5A
+}
+// Executed every 10 ms
+void Timer5A_Handler(void){
+  TIMER5_ICR_R = 0x00000001;       // acknowledge timer5A timeout
+  disk_timerproc();
+}
+
+
 //********SSI0_Init*****************
 // Initialize SSI0 interface to SDC
 // inputs:  clock divider to set clock frequency
@@ -110,7 +138,7 @@ void CS_Init(void){
 //void Timer5_Init(void);
 void SSI0_Init(unsigned long CPSDVSR){
   SYSCTL_RCGCSSI_R |= 0x01;    // activate SSI0
-//  Timer5_Init();
+  Timer5_Init();
   CS_Init();                            // initialize whichever GPIO pin is CS for the SD card
   // initialize Port A
   SYSCTL_RCGCGPIO_R |= 0x01;            // activate clock for Port A
@@ -145,30 +173,6 @@ void SSI0_Init(unsigned long CPSDVSR){
   SSI0_CR0_R = (SSI0_CR0_R&~SSI_CR0_DSS_M)+SSI_CR0_DSS_8;
   SSI0_CR1_R |= SSI_CR1_SSE;            // enable SSI
 }
-
-
-//void Timer5_Init(void){volatile unsigned short delay;
-//  SYSCTL_RCGCTIMER_R |= 0x20;
-//  delay = SYSCTL_SCGCTIMER_R;
-//  delay = SYSCTL_SCGCTIMER_R;
-//  TIMER5_CTL_R = 0x00000000;       // 1) disable timer5A during setup
-//  TIMER5_CFG_R = 0x00000000;       // 2) configure for 32-bit mode
-//  TIMER5_TAMR_R = 0x00000002;      // 3) configure for periodic mode, default down-count settings
-//  TIMER5_TAILR_R = 799999;         // 4) reload value, 10 ms, 80 MHz clock
-//  TIMER5_TAPR_R = 0;               // 5) bus clock resolution
-//  TIMER5_ICR_R = 0x00000001;       // 6) clear timer5A timeout flag
-//  TIMER5_IMR_R = 0x00000001;       // 7) arm timeout interrupt
-//  NVIC_PRI23_R = (NVIC_PRI23_R&0xFFFFFF00)|0x00000040; // 8) priority 2
-//// interrupts enabled in the main program after all devices initialized
-//// vector number 108, interrupt number 92
-//  NVIC_EN2_R = 0x10000000;         // 9) enable interrupt 92 in NVIC
-//  TIMER5_CTL_R = 0x00000001;       // 10) enable timer5A
-//}
-//// Executed every 10 ms
-//void Timer5A_Handler(void){
-//  TIMER5_ICR_R = 0x00000001;       // acknowledge timer5A timeout
-//  disk_timerproc();
-//}
 
 
 // SSIClk = PIOSC / (CPSDVSR * (1 + SCR)) = 80 MHz/CPSDVSR
@@ -546,7 +550,10 @@ DRESULT eDisk_Read(BYTE drv, BYTE *buff, DWORD sector, UINT count){
 DRESULT eDisk_ReadBlock(
     BYTE *buff,         /* Pointer to the data buffer to store read data */
     DWORD sector){      /* Start sector number (LBA) */
-  return eDisk_Read(0,buff,sector,1);
+	OS_bWait(&ssi_lock);
+	DRESULT res = eDisk_Read(0,buff,sector,1);
+	OS_bSignal(&ssi_lock);
+	return res;
 }
 
 
@@ -598,9 +605,12 @@ DRESULT eDisk_Write(BYTE drv, const BYTE *buff, DWORD sector, UINT count){
 //  RES_NOTRDY    3: Not Ready
 //  RES_PARERR    4: Invalid Parameter
 DRESULT eDisk_WriteBlock (
-    const BYTE *buff,   /* Pointer to the data to be written */
-    DWORD sector){      /* Start sector number (LBA) */
-  return eDisk_Write(0,buff,sector,1);  // 1 block
+	const BYTE *buff,   /* Pointer to the data to be written */
+	DWORD sector){      /* Start sector number (LBA) */
+	OS_bWait(&ssi_lock);
+	DRESULT res = eDisk_Write(0,buff,sector,1);  // 1 block
+	OS_bSignal(&ssi_lock);
+	return res;
 }
 
 #endif

@@ -45,9 +45,10 @@ static void os_timer_init(void);
 void OS_Init(void){
   OS_DisableInterrupts();	  // disable all processor interrupt; will be enabled in OS_Launch
   PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
-  Serial_Init();
   LED_Init();
+  Serial_Init();
   LCD_Init();
+
   os_timer_init();
 
   NVIC_ST_CTRL_R = 0;         // disable SysTick during setup
@@ -604,8 +605,8 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 void print_jitter(void) {
 //	ST7735_Message(1,0,"Jitter 1 = ", maxJitter1);
 //	ST7735_Message(1,1,"Jitter 2 = ", maxJitter2);
-	Serial_println("Periodic Task 1 jitter (0.1 us): %u", maxJitter1);
-	Serial_println("Periodic Task 2 jitter (0.1 us): %u", maxJitter2);
+	printf("Periodic Task 1 jitter (0.1 us): %u\n", maxJitter1);
+	printf("Periodic Task 2 jitter (0.1 us): %u\n", maxJitter2);
 }
 
 void Timer1A_Handler(void){
@@ -785,7 +786,7 @@ void GPIOPortF_Handler(void) {  // negative logic
 			sw1_task();
 		}
 		// debounce required on both press and release
-		int ret = OS_AddThread(sw1_debounce, 128, sw1_pri);  // for debounce purpose, priority for switch tasks need to be high
+		int ret = OS_AddThread(sw1_debounce, 128, 1);  // for debounce purpose, priority for switch tasks need to be high
 		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
 			GPIO_PORTF_ICR_R = 0x10;
 			GPIO_PORTF_IM_R |= 0x10;
@@ -796,7 +797,7 @@ void GPIOPortF_Handler(void) {  // negative logic
 		if (lastPF0) {
 			sw2_task();
 		}
-		int ret = OS_AddThread(sw2_debounce, 128, sw2_pri);  // for debounce purpose, priority for switch tasks need to be high
+		int ret = OS_AddThread(sw2_debounce, 128, 1);  // for debounce purpose, priority for switch tasks need to be high
 		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
 			GPIO_PORTF_ICR_R = 0x01;
 			GPIO_PORTF_IM_R |= 0x01;

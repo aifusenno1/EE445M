@@ -11,6 +11,12 @@
 
  ******************************************************************************/
 
+typedef enum {
+	EFILE_SUCCESS = 0,
+	EFILE_FAILURE = 1
+} FRESULT;
+
+
 
 /**
  * @details This function must be called first, before calling any of the other eFile functions
@@ -18,7 +24,7 @@
  * @return 0 if successful and 1 on failure (already initialized)
  * @brief  Activate the file system, without formating
  */
-int eFile_Init(void); // initialize file system
+FRESULT eFile_Init(void); // initialize file system
 
 
 /**
@@ -27,7 +33,7 @@ int eFile_Init(void); // initialize file system
  * @return 0 if successful and 1 on failure (e.g., trouble writing to flash)
  * @brief  Format the disk
  */
-int eFile_Format(void); // erase disk, add format
+FRESULT eFile_Format(void); // erase disk, add format
 
 /**
  * @details Create a new, empty file with one allocated block
@@ -35,7 +41,7 @@ int eFile_Format(void); // erase disk, add format
  * @return 0 if successful and 1 on failure (e.g., already exists)
  * @brief  Create a new file
  */
-int eFile_Create( char name[]);  // create new file, make it empty
+FRESULT eFile_Create( char name[]);  // create new file, make it empty
 
 
 /**
@@ -44,7 +50,7 @@ int eFile_Create( char name[]);  // create new file, make it empty
  * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
  * @brief  Open an existing file for writing
  */
-int eFile_WOpen(char name[]);      // open a file for writing
+FRESULT eFile_WOpen(char name[]);      // open a file for writing
 
 
 /**
@@ -53,7 +59,7 @@ int eFile_WOpen(char name[]);      // open a file for writing
  * @return 0 if successful and 1 on failure (e.g., trouble writing to flash)
  * @brief  Format the disk
  */
-int eFile_Write(char data);
+FRESULT eFile_Write(char data);
 
 /**
  * @details Deactivate the file system. One can reactive the file system with eFile_Init.
@@ -61,7 +67,7 @@ int eFile_Write(char data);
  * @return 0 if successful and 1 on failure (e.g., trouble writing to flash)
  * @brief  Close the disk
  */
-int eFile_Close(void);
+FRESULT eFile_Close(void);
 
 
 /**
@@ -71,7 +77,7 @@ int eFile_Close(void);
  * @return 0 if successful and 1 on failure (e.g., trouble writing to flash)
  * @brief  Close the file that was being written
  */
-int eFile_WClose(void); // close the file for writing
+FRESULT eFile_WClose(void); // close the file for writing
 
 /**
  * @details Open the file for reading, read first block into RAM
@@ -79,7 +85,7 @@ int eFile_WClose(void); // close the file for writing
  * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
  * @brief  Open an existing file for reading
  */
-int eFile_ROpen(char name[]);      // open a file for reading
+FRESULT eFile_ROpen(char name[]);      // open a file for reading
 
 
 /**
@@ -88,7 +94,7 @@ int eFile_ROpen(char name[]);      // open a file for reading
  * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
  * @brief  Retreive data from open file
  */
-int eFile_ReadNext(char *pt);       // get next byte
+FRESULT eFile_ReadNext(char *pt);       // get next byte
 
 /**
  * @details Close the file, leave disk in a state power can be removed.
@@ -96,16 +102,16 @@ int eFile_ReadNext(char *pt);       // get next byte
  * @return 0 if successful and 1 on failure (e.g., wasn't open)
  * @brief  Close the file that was being read
  */
-int eFile_RClose(void); // close the file for writing
+FRESULT eFile_RClose(void); // close the file for reading
 
 
 /**
  * @details Display the directory with filenames and sizes
- * @param  fp pointer to a function that outputs ASCII characters to display
- * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
+ * @param  printf pointer to a function that outputs ASCII characters to display
+ * @return none
  * @brief  Show directory
  */
-int eFile_Directory(void(*fp)(char));
+void eFile_Directory(void printf(const char *, ...));
 
 /**
  * @details Delete the file with this name, recover blocks so they can be used by another file
@@ -113,7 +119,7 @@ int eFile_Directory(void(*fp)(char));
  * @return 0 if successful and 1 on failure (e.g., file doesn't exist)
  * @brief  delete this file
  */
-int eFile_Delete(char name[]);  // remove this file
+FRESULT eFile_Delete(char name[]);  // remove this file
 
 /**
  * @details open the file for writing, redirect stream I/O (printf) to this file
@@ -123,7 +129,7 @@ int eFile_Delete(char name[]);  // remove this file
  * @return 0 if successful and 1 on failure (e.g., can't open)
  * @brief  redirect printf output into this file
  */
-int eFile_RedirectToFile(char *name);
+FRESULT eFile_RedirectToFile(char *name);
 
 
 /**
@@ -132,4 +138,4 @@ int eFile_RedirectToFile(char *name);
  * @return 0 if successful and 1 on failure (e.g., trouble writing)
  * @brief  Stop streaming printf to file
  */
-int eFile_EndRedirectToFile(void);
+FRESULT eFile_EndRedirectToFile(void);

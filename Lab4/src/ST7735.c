@@ -88,12 +88,12 @@
 // Z� (NC) analog input Z-axis from ADXL335 accelerometer
 // Backlight + - Light, backlight connected to +3.3 V
 
-#include <stdio.h>
 #include <stdint.h>
 #include "ST7735.h"
 #include "tm4c123gh6pm.h"
 #include "OS.h"
 #include "string.h"
+#include "LED.h"
 
 // 16 rows (0 to 15) and 21 characters (0 to 20)
 // Requires (11 + size*size*6*8) bytes of transmission for each character
@@ -491,7 +491,7 @@ static uint8_t Rotation;           // 0 to 3
 static enum initRFlags TabColor;
 static int16_t _width = ST7735_TFTWIDTH;   // this could probably be a constant, except it is used in Adafruit_GFX and depends on image rotation
 static int16_t _height = ST7735_TFTHEIGHT;
-
+Sema4Type ssi_lock;
 
 // The Data/Command pin must be valid when the eighth bit is
 // sent.  The SSI module has hardware input and output FIFOs
@@ -794,6 +794,7 @@ void ST7735_InitR(enum initRFlags option) {
   TabColor = option;
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
+
   ST7735_FillScreen(0);                 // set screen to black
 }
 
@@ -1179,8 +1180,10 @@ void ST7735_SetCursor(uint32_t newX, uint32_t newY){
   if((newX > 20) || (newY > 15)){       // bad input
     return;                             // do nothing
   }
+  OS_bWait(&ssi_lock);
   StX = newX;
   StY = newY;
+  OS_bSignal(&ssi_lock);
 }
 //-----------------------ST7735_OutUDec-----------------------
 // Output a 32-bit number in unsigned decimal format
@@ -1190,18 +1193,16 @@ void ST7735_SetCursor(uint32_t newX, uint32_t newY){
 // Output: none
 // Variable format 1-10 digits with no space before or after
 void ST7735_OutUDec(uint32_t n){
-  Messageindex = 0;
-  fillmessage(n);
-  Message[Messageindex] = 0; // terminate
-  ST7735_DrawString(StX,StY,Message,StTextColor);
-  StX = StX+Messageindex;
-  if(StX>20){
-    StX = 20;
-    ST7735_DrawCharS(StX*6,StY*10,'*',ST7735_RED,ST7735_BLACK, 1);
-  }
+	Messageindex = 0;
+	fillmessage(n);
+	Message[Messageindex] = 0; // terminate
+	ST7735_DrawString(StX,StY,Message,StTextColor);
+	StX = StX+Messageindex;
+	if(StX>20){
+		StX = 20;
+		ST7735_DrawCharS(StX*6,StY*10,'*',ST7735_RED,ST7735_BLACK, 1);
+	}
 }
-
-
 
 
 
@@ -1528,6 +1529,7 @@ void ST7735_PlotNextErase(void){
 // Inputs: 8-bit ASCII character
 // Outputs: none
 void ST7735_OutChar(char ch){
+
   if((ch == 10) || (ch == 13) || (ch == 27)){
     StY++; StX=0;
     if(StY>15){
@@ -1552,10 +1554,12 @@ void ST7735_OutChar(char ch){
 // inputs: ptr  pointer to NULL-terminated ASCII string
 // outputs: none
 void ST7735_OutString(char *ptr){
-  while(*ptr){
-    ST7735_OutChar(*ptr);
-    ptr = ptr + 1;
-  }
+	OS_bWait(&ssi_lock);
+	while(*ptr){
+		ST7735_OutChar(*ptr);
+		ptr = ptr + 1;
+	}
+	OS_bSignal(&ssi_lock);
 }
 // ************** ST7735_SetTextColor ************************
 // Sets the color in which the characters will be printed
@@ -1566,15 +1570,15 @@ void ST7735_OutString(char *ptr){
 void ST7735_SetTextColor(uint16_t color){
   StTextColor = color;
 }
-// Print a character to ST7735 LCD.
-int fputc(int ch, FILE *f){
-  ST7735_OutChar(ch);
-  return 1;
-}
-// No input from Nokia, always return data.
-int fgetc (FILE *f){
-  return 0;
-}
+//// Print a character to ST7735 LCD.
+//int fputc(int ch, FILE *f){
+//  ST7735_OutChar(ch);
+//  return 1;
+//}
+//// No input from Nokia, always return data.
+//int fgetc (FILE *f){
+//  return 0;
+//}
 // Function called when file error occurs.
 //int ferror(FILE *f){
 //  /* Your implementation of ferror */
@@ -1613,15 +1617,16 @@ void Output_Color(uint32_t newColor){ // Set color of future output
   ST7735_SetTextColor(newColor);
 }
 
-
 // ************** Self-created functions *************
 
-static Sema4Type lcd_lock;
 void LCD_Init(){
+	// currently, SetCursor, OutString and Message are the only functions implemented mutex
+	// need to be handled very careful due to a lot of nesting in these functions
+	// e.g. cannot call OutString in Message, also do not use OutUDec as public function
+	OS_InitSemaphore(&ssi_lock, 1); // this must be first, since init routine uses SetCursor
 	ST7735_InitR(INITR_REDTAB);
 	ST7735_FillScreen(0x0000);
 	ST7735_DrawFastHLine(0, 80, 128, 0xffe0);
-	OS_InitSemaphore(&lcd_lock, 1);
 }
 
 /*
@@ -1630,8 +1635,8 @@ void LCD_Init(){
  */
 
 void ST7735_Message (int device, int line, char *str, int32_t value) {
+	OS_bWait(&ssi_lock);
 
-	OS_bWait(&lcd_lock);
 	int y = 1;
 	switch (device) {
 	case (0) :  // row 0 - 7
@@ -1659,8 +1664,7 @@ void ST7735_Message (int device, int line, char *str, int32_t value) {
 	break;
 	default	 :;
 	}
-	ST7735_SetCursor(0,y);
-	ST7735_OutString(str);
+	ST7735_DrawString(0, y, str, StTextColor);
 	ST7735_OutUDec(value);
-	OS_bSignal(&lcd_lock);
+	OS_bSignal(&ssi_lock);
 }

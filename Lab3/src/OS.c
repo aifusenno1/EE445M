@@ -159,6 +159,7 @@ unsigned long OS_Id(void) {
 }
 
 // schedules the next thread to run
+// always selects the highest priority (including the current running thread), so may cause starvation
 void threadScheduler(void) {
 	tcbType * pt = RunPt;
 	tcbType * endPt;  // endPt is the last thread to check in the Linked List
@@ -235,8 +236,8 @@ void OS_Kill(void) {
 	RunPt->state = FREE;
 	RunPt->prev->next = RunPt->next;
 	RunPt->next->prev = RunPt->prev;
-	OS_EnableInterrupts();
 	threadCnt--;
+	OS_EnableInterrupts();
 	OS_Suspend();
 }
 
