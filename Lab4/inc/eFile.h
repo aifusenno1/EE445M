@@ -16,8 +16,6 @@ typedef enum {
 	EFILE_FAILURE = 1
 } FRESULT;
 
-
-
 /**
  * @details This function must be called first, before calling any of the other eFile functions
  * @param  none
@@ -41,7 +39,7 @@ FRESULT eFile_Format(void); // erase disk, add format
  * @return 0 if successful and 1 on failure (e.g., already exists)
  * @brief  Create a new file
  */
-FRESULT eFile_Create( char name[]);  // create new file, make it empty
+FRESULT eFile_Create(char name[]);  // create new file, make it empty
 
 
 /**

@@ -19,6 +19,7 @@
 #include "string.h"
 #include "OS.h"
 #include "Serial.h"
+#include "LED.h"
 
 typedef WORD block_t;
 typedef DWORD file_len_t;
@@ -50,16 +51,19 @@ typedef struct {
 	int rw;     		    // 0 for read, 1 for write
 } File;
 
-File openedFile;  // only one opened file allowed
-int fileOpened = 0;
 
-struct {
+struct __directory {
 	DirEntry entries[MAX_FILE_NUM];
 	block_t freeSpace;  // first block in free space link
 	BYTE fileNum;
-} directory;   // have to make sure this is under DIR_SIZE * BLOCK_SIZE
+};
+
+struct __directory directory;   // have to make sure this is under DIR_SIZE * BLOCK_SIZE
 
 BYTE fat[FS_SIZE];  // zero mean no next block
+
+File openedFile;  // only one opened file allowed
+int fileOpened = 0;
 
 // return 0 if no free block
 static block_t allocateBlock(void) {
@@ -67,11 +71,11 @@ static block_t allocateBlock(void) {
 
 	block_t temp = directory.freeSpace;
 	directory.freeSpace = fat[temp];
+	fat[temp] = 0;
 	return temp;
 }
 
 /* Public Functions */
-
 /**
  * @details This function must be called first, before calling any of the other eFile functions
  * @param  none
@@ -153,17 +157,19 @@ FRESULT eFile_Format(void) {
  */
 FRESULT eFile_Create(char name[]) {
 	// directory full
+
 	if (directory.fileNum == MAX_FILE_NUM)
 		return EFILE_FAILURE;
 
 	// file name already exists
 	for (int i = 0; i < MAX_FILE_NUM; i++) {
-		if (directory.entries[i].firstBlock != 0 && strcmp(name, directory.entries[i].name) == 0)
+		if (directory.entries[i].firstBlock != 0 && strcmp(name, directory.entries[i].name) == 0) {
 			return EFILE_FAILURE;
+		}
 	}
 
 	int in = 0;
-	while (in < MAX_FILE_NUM) {
+	while (in++ < MAX_FILE_NUM) {
 		if (directory.entries[in].firstBlock == 0) {
 			block_t bl = allocateBlock();
 			if (bl == 0) return EFILE_FAILURE; // no more free space
@@ -188,9 +194,8 @@ FRESULT eFile_Create(char name[]) {
 FRESULT eFile_Delete(char name[]) {
 	for (int i = 0; i < MAX_FILE_NUM; i++) {
 		if (directory.entries[i].firstBlock != 0 && strcmp(name, directory.entries[i].name) == 0) {
-			// if this file is opened, cannot delete
 			if (fileOpened && openedFile.entry == &directory.entries[i])
-				return EFILE_FAILURE;
+				fileOpened = 0;
 
 			// update directory and FAT
 			block_t b;
@@ -202,46 +207,28 @@ FRESULT eFile_Delete(char name[]) {
 				fat[cb] = directory.freeSpace;
 				directory.freeSpace = cb;
 			} while (b != 0);
+			directory.fileNum--;
+
+			// write directory to disk
+			BYTE * pt = (BYTE *) &directory;
+			for (int i = 0; i < DIR_SIZE; i++) {
+				DRESULT res = eDisk_WriteBlock(pt, i);
+				if (res != RES_OK) return EFILE_FAILURE;
+				pt += BLOCK_SIZE;
+			}
+
+			// write FAT to disk
+			pt = fat;
+			for (int i = FAT_START_BLOCK; i <= FAT_END_BLOCK; i++) {
+				DRESULT res = eDisk_WriteBlock(pt, i);
+				if (res != RES_OK) return EFILE_FAILURE;
+				pt += BLOCK_SIZE;
+			}
 
 			return EFILE_SUCCESS;
 		}
 	}
 	return EFILE_FAILURE;
-}
-
-/**
- * @details Open the file for writing, read into RAM last block
- * @param  name file name is an ASCII string up to seven characters
- * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
- * @brief  Open an existing file for writing
- */
-FRESULT eFile_WOpen(char name[]) {
-	// if a file currently opened, fail
-	if (fileOpened) return EFILE_FAILURE;
-
-	for (int i = 0; i < MAX_FILE_NUM; i++) {
-		if (directory.entries[i].firstBlock != 0 && strcmp(name, directory.entries[i].name) == 0) {
-			openedFile.entry = &directory.entries[i];
-			openedFile.pos = openedFile.entry->fileSize;
-			openedFile.rw = 1;
-			fileOpened = 1;
-
-			block_t endBlock = openedFile.entry->firstBlock;
-			while (fat[endBlock] != 0)
-				endBlock = fat[endBlock];
-
-			DRESULT res = eDisk_ReadBlock((BYTE *) &openedFile.data, endBlock);
-			if (res != RES_OK) {
-				fileOpened = 0;
-				return EFILE_FAILURE;
-			}
-			break;
-		}
-	}
-	// not existing file matches the name
-	if (fileOpened == 0) return EFILE_FAILURE;
-
-	return EFILE_SUCCESS;
 }
 
 
@@ -262,7 +249,6 @@ FRESULT eFile_ROpen(char name[]) {
 			openedFile.rw = 0;
 			openedFile.curBlock = openedFile.entry->firstBlock;
 			fileOpened = 1;
-
 			DRESULT res = eDisk_ReadBlock((BYTE *) &openedFile.data, openedFile.curBlock);
 			if (res != RES_OK) {
 				fileOpened = 0;
@@ -289,7 +275,6 @@ FRESULT eFile_ReadNext(char *pt) {
 
 	// must include "equal" here since pos starts with 0
 	if (openedFile.pos >= openedFile.entry->fileSize) return EFILE_FAILURE;
-
 	*pt = openedFile.data[openedFile.pos % BLOCK_SIZE];
 
 	// increment pos and switch block
@@ -307,6 +292,48 @@ FRESULT eFile_ReadNext(char *pt) {
 	return EFILE_SUCCESS;
 }
 
+
+/**
+ * @details Open the file for writing, read into RAM last block
+ * @param  name file name is an ASCII string up to seven characters
+ * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
+ * @brief  Open an existing file for writing
+ */
+FRESULT eFile_WOpen(char name[]) {
+	// if a file currently opened, fail
+	if (fileOpened) return EFILE_FAILURE;
+
+	for (int i = 0; i < MAX_FILE_NUM; i++) {
+		if (directory.entries[i].firstBlock != 0 && strcmp(name, directory.entries[i].name) == 0) {
+			openedFile.entry = &directory.entries[i];
+			openedFile.pos = openedFile.entry->fileSize;
+			openedFile.rw = 1;
+			fileOpened = 1;
+
+			block_t endBlock = openedFile.entry->firstBlock;
+
+			int cur = BLOCK_SIZE;
+			while (cur < openedFile.pos) {
+				endBlock = fat[endBlock];
+				cur += BLOCK_SIZE;
+			}
+
+			DRESULT res = eDisk_ReadBlock((BYTE *) &openedFile.data, endBlock);
+			if (res != RES_OK) {
+				fileOpened = 0;
+				return EFILE_FAILURE;
+			}
+			openedFile.curBlock = endBlock;
+			break;
+		}
+	}
+	// not existing file matches the name
+	if (fileOpened == 0) return EFILE_FAILURE;
+
+	return EFILE_SUCCESS;
+}
+
+
 /**
  * @details Save one byte at end of the open file
  * @param  data byte to be saved on the disk
@@ -316,22 +343,24 @@ FRESULT eFile_ReadNext(char *pt) {
 FRESULT eFile_Write(char data) {
 	if (!fileOpened || !openedFile.rw) return EFILE_FAILURE;
 
-	openedFile.data[openedFile.pos] = data;
+	openedFile.data[(openedFile.pos % BLOCK_SIZE)] = data;
+
 	if ((++openedFile.pos % BLOCK_SIZE) == 0) {
 		DRESULT res = eDisk_WriteBlock((BYTE *) &openedFile.data, openedFile.curBlock);
 		if (res != RES_OK) {
 			fileOpened = 0;
 			return EFILE_FAILURE;
 		}
-		block_t b = fat[openedFile.curBlock];
-		if (b == 0) {  // allocate new block
-			b = allocateBlock();
-			if (b == 0) {
-				fileOpened = 0;
-				return EFILE_FAILURE;
-			}
-			fat[openedFile.curBlock] = b;
+		// allocate new block
+		block_t b = allocateBlock();
+
+		if (b == 0) {
+			fileOpened = 0;
+			return EFILE_FAILURE;
 		}
+		fat[openedFile.curBlock] = b;
+
+//		memset(&openedFile.data, 0, sizeof (openedFile.data));
 		res = eDisk_ReadBlock((BYTE *) &openedFile.data, b);
 		if (res != RES_OK) {
 			fileOpened = 0;
@@ -339,7 +368,9 @@ FRESULT eFile_Write(char data) {
 		}
 		openedFile.curBlock = b;
 	}
+
 	openedFile.entry->fileSize++;
+
 	return EFILE_SUCCESS;
 }
 
@@ -352,12 +383,11 @@ FRESULT eFile_Write(char data) {
  */
 FRESULT eFile_WClose(void) {
 	if (!fileOpened || !openedFile.rw) return EFILE_FAILURE;
+	fileOpened = 0;
 	DRESULT res = eDisk_WriteBlock((BYTE *) &openedFile.data, openedFile.curBlock);
 	if (res != RES_OK) {
-		fileOpened = 0;
 		return EFILE_FAILURE;
 	}
-	fileOpened = 0;
 
 	// write directory to disk
 	BYTE * pt = (BYTE *) &directory;
@@ -411,47 +441,19 @@ FRESULT eFile_Close(void) {
 
 /**
  * @details Display the directory with filenames and sizes
- * @param  buf to where the
- * `
- * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
- * @brief  Show directory
- */
-//FRESULT eFile_Directory(char *buf, size_t size) {
-//	size_t len = 0;
-//	for (int i=0; i<MAX_FILE_NUM; i++) {
-//		if (directory.entries.firstBlock == 0)
-//			continue;
-//		len += strlen(directory.entries[i].name);
-//		if (len <= size)
-//			strcat(buf, directory.entries[i].name);
-//		else return EFILE_FAILURE;
-//
-//
-//
-//		char str[4];  // 32 bits
-//		itoa (directory.entries[i].fileSize, str, 10);
-//		len += strlen(str);
-//		if (len <= size)
-//			strcat (buf, str);
-//		else return EFILE_FAILURE;
-//	}
-//	return EFILE_SUCCESS;
-//}
-
-
-/**
- * @details Display the directory with filenames and sizes
  * @param  printf pointer to a function that outputs ASCII characters to display
  * @return none
  * @brief  Show directory
  */
 void eFile_Directory(void printf(const char *, ...)) {
+	printf("File Name   File Size\n\r");
+
 	for (int i=0; i<MAX_FILE_NUM; i++) {
 		if (directory.entries[i].firstBlock == 0)
 			continue;
 
 
-		printf("%s   %d\n", directory.entries[i].name, directory.entries[i].fileSize);
+		printf("%s   %u\n\r", directory.entries[i].name, directory.entries[i].fileSize);
 	}
 }
 
@@ -466,10 +468,20 @@ void eFile_Directory(void printf(const char *, ...)) {
  */
 FRESULT eFile_RedirectToFile(char *name) {
 	OS_bWait(&output_lock);                  // cannot change stream in the middle of printing something
+
+	eFile_Create(name);
+//	LED_GREEN_TOGGLE();
+
 	FRESULT res = eFile_WOpen(name);
-	if (res != EFILE_SUCCESS) return res;
+
+	if (res != EFILE_SUCCESS) {
+		return res;
+	}
+//	LED_BLUE_TOGGLE();
+
 	outstream = FILE_STREAM;
 	OS_bSignal(&output_lock);
+
 	return EFILE_SUCCESS;
 }
 

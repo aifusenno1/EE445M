@@ -81,6 +81,7 @@
 #include "eFile.h"
 #include <string.h>
 #include <stdint.h>
+#include "LED.h"
 
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
@@ -180,31 +181,38 @@ char Name[8]="robot0";
 // inputs:  none
 // outputs: none
 void Robot(void){
-unsigned long data;      // ADC sample, 0 to 1023
-unsigned long voltage;   // in mV,      0 to 3300
-unsigned long distance;  // in mm,      100 to 800
-unsigned long time;      // in 10msec,  0 to 1000
-  OS_ClearMsTime();
-  DataLost = 0;          // new run with no lost data
-  OS_Fifo_Init(256);
-  printf("Robot running...");
-  eFile_RedirectToFile(Name); // robot0, robot1,...,robot7
-  printf("time(sec)\tdata(volts)\tdistance(mm)\n");
-  do{
-    PIDWork++;    // performance measurement
-    time=OS_MsTime();            // 10ms resolution in this OS
-    data = OS_Fifo_Get();        // 1000 Hz sampling get from producer
-    voltage = (300*data)/1024;   // in mV
-    distance = ADC2millimeter(data);
-    printf("%0u.%02u\t%0u.%03u \t%5u\n",time/100,time%100,voltage/1000,voltage%1000,distance);
-  }
-  while(time < 200);       // change this to mean 2 seconds
-  eFile_EndRedirectToFile();
-  ST7735_Message(0,1,"IR0 (mm) =",distance);
-  printf("done.\n");
-  Name[5] = (Name[5]+1)&0xF7; // 0 to 7
-  Running = 0;             // robot no longer running
-  OS_Kill();
+	unsigned long data;      // ADC sample, 0 to 1023
+	unsigned long voltage;   // in mV,      0 to 3300
+	unsigned long distance;  // in mm,      100 to 800
+	unsigned long startTime;      // in 10msec,  0 to 1000
+	unsigned long time;      // in 10msec,  0 to 1000
+	OS_ClearMsTime();
+	DataLost = 0;          // new run with no lost data
+	OS_Fifo_Init(256);
+	printf("Robot running...");
+
+	eFile_RedirectToFile(Name); // robot0, robot1,...,robot7
+
+	printf("time(sec)\tdata(volts)\tdistance(mm)\n\r");
+	startTime = OS_MsTime();
+
+	do{
+		PIDWork++;    // performance measurement
+		time=OS_MsTime();            // 10ms resolution in this OS
+		data = OS_Fifo_Get();        // 1000 Hz sampling get from producer
+		voltage = (300*data)/1024;   // in mV
+		distance = ADC2millimeter(data);
+		printf("%u.%u\t%u.%u \t%u\n\r",time/100,time%100,voltage/1000,voltage%1000,distance);
+//		printf("%0u.%02u\t%0u.%03u \t%5u\n\r",time/100,time%100,voltage/1000,voltage%1000,distance);
+	}
+	while(time - startTime < 2000);       // change this to mean 2 seconds
+
+	eFile_EndRedirectToFile();
+	ST7735_Message(0,1,"IR0 (mm) =",distance);
+	printf("done.\n\r");
+	Name[5] = (Name[5]+1)&0xF7; // 0 to 7
+	Running = 0;             // robot no longer running
+	OS_Kill();
 }
 
 //************SW1Push*************
@@ -220,7 +228,7 @@ void SW1Push(void){
 // Called when SW2 Button pushed
 // background threads execute once and return
 void SW2Push(void){
-
+	LED_GREEN_TOGGLE();
 }
 
 
@@ -321,6 +329,7 @@ void Thread1(void){
   for(;;){
     PD0 ^= 0x01;       // heartbeat
     Count1++;
+    printf("%u %u %u\n\r", Count1, Count2, Count3);
   }
 }
 void Thread2(void){
@@ -360,13 +369,11 @@ void diskError(char* errtype, unsigned long n){
 void TestDisk(void){
 	DSTATUS result;  unsigned short block;  int i; unsigned long n;
 	// simple test of eDisk
-	ST7735_SetCursor(0, 1);
-	ST7735_SetTextColor(ST7735_WHITE);
-	ST7735_OutString("eDisk test      ");
-	printf("\nEE445M/EE380L, Lab 4 eDisk test\n");
+	ST7735_OutString(0, 1, "eDisk test      ", ST7735_WHITE);
+	printf("\n\rEE445M/EE380L, Lab 4 eDisk test\n\r");
 	result = eDisk_Init(0);  // initialize disk
 	if(result) diskError("eDisk_Init",result);
-	printf("Writing blocks\n");
+	printf("Writing blocks\n\r");
 	n = 1;    // seed
 	for(block = 0; block < MAXBLOCKS; block++){
 		for(i=0;i<512;i++){
@@ -377,7 +384,7 @@ void TestDisk(void){
 		if(eDisk_WriteBlock(buffer,block))diskError("eDisk_WriteBlock",block); // save to disk
 		PD3 = 0x00;
 	}
-	printf("Reading blocks\n");
+	printf("Reading blocks\n\r");
 	n = 1;  // reseed, start over to get the same sequence
 	for(block = 0; block < MAXBLOCKS; block++){
 		PD2 = 0x04;     // PF2 high for one block read
@@ -386,15 +393,14 @@ void TestDisk(void){
 		for(i=0;i<512;i++){
 			n = (16807*n)%2147483647; // pseudo random sequence
 			if(buffer[i] != (0xFF&n)){
-				printf("Read data not correct, block=%u, i=%u, expected %u, read %u\n",block,i,(0xFF&n),buffer[i]);
+				printf("Read data not correct, block=%u, i=%u, expected %u, read %u\n\r",block,i,(0xFF&n),buffer[i]);
 				OS_Kill();
 			}
 		}
 	}
-	printf("Successful test of %u blocks\n",MAXBLOCKS);
-	ST7735_SetCursor(0, 1);
-	ST7735_SetTextColor(ST7735_YELLOW);
-	ST7735_OutString("eDisk successful");
+	printf("Successful test of %u blocks\n\r",MAXBLOCKS);
+	ST7735_OutString(0, 1, "eDisk successful", ST7735_YELLOW);
+
 	Running=0; // launch again
 	OS_Kill();
 }
@@ -413,7 +419,7 @@ void SW1Push1(void){
 //******************* test main1 **********
 // SYSTICK interrupts, period established by OS_Launch
 // Timer interrupts, period established by first call to OS_AddPeriodicThread
-int main(void){   // testmain1
+int testmain1(void){   // testmain1
   OS_Init();           // initialize, disable interrupts
   PortD_Init();
 //*******attach background tasks***********
@@ -433,16 +439,17 @@ int main(void){   // testmain1
 //*****************test project 2*************************
 void TestFile(void){
 	int i; char data;
-	printf("\nEE445M/EE380L, Lab 4 eFile test\n");
-	ST7735_SetCursor(0, 1);
-	ST7735_SetTextColor(ST7735_WHITE);
-	ST7735_OutString("eFile test      ");
+	printf("\n\rEE445M/EE380L, Lab 4 eFile test\n\r");
+	ST7735_OutString(0, 1, "eFile test      ", ST7735_WHITE);
 	// simple test of eFile
 	if(eFile_Init())              diskError("eFile_Init",0);
 	if(eFile_Format())            diskError("eFile_Format",0);
+
 	eFile_Directory(printf);
 	if(eFile_Create("file1"))     diskError("eFile_Create",0);
+
 	if(eFile_WOpen("file1"))      diskError("eFile_WOpen",0);
+
 	for(i=0;i<1000;i++){
 		if(eFile_Write('a'+i%26))   diskError("eFile_Write",i);
 		if(i%52==51){
@@ -450,6 +457,7 @@ void TestFile(void){
 			if(eFile_Write('\r'))     diskError("eFile_Write",i);
 		}
 	}
+
 	if(eFile_WClose())            diskError("eFile_WClose",0);
 	eFile_Directory(printf);
 	if(eFile_ROpen("file1"))      diskError("eFile_ROpen",0);
@@ -460,10 +468,8 @@ void TestFile(void){
 	if(eFile_Delete("file1"))     diskError("eFile_Delete",0);
 	eFile_Directory(printf);
 	if(eFile_Close())             diskError("eFile_Close",0);
-	printf("Successful test of creating a file\n");
-	ST7735_SetCursor(0, 1);
-	ST7735_SetTextColor(ST7735_YELLOW);
-	ST7735_OutString("eFile successful");
+	printf("Successful test of creating a file\n\r");
+	ST7735_OutString(0, 1, "eFile successful", ST7735_YELLOW);
 	Running=0; // launch again
 	OS_Kill();
 }
@@ -479,18 +485,55 @@ void SW1Push2(void){
 //******************* test main2 **********
 // SYSTICK interrupts, period established by OS_Launch
 // Timer interrupts, period established by first call to OS_AddPeriodicThread
-int testmain2(void){        // testmain2
+int main(void){        // testmain2
   OS_Init();           // initialize, disable interrupts
   PortD_Init();
   Running = 1;
 
 //*******attach background tasks***********
-  OS_AddPeriodicThread(&disk_timerproc,10*TIME_1MS,0);   // time out routines for disk
+//  OS_AddPeriodicThread(&disk_timerproc,10*TIME_1MS,0);   // time out routines for disk
   OS_AddSW1Task(&SW1Push1,2);    // PF4, SW1
   OS_AddSW2Task(&SW1Push2,2);    // PF0, SW2
   NumCreated = 0 ;
 // create initial foreground threads
   NumCreated += OS_AddThread(&TestFile,128,1);
+  NumCreated += OS_AddThread(&interpreter,128,1);
+  NumCreated += OS_AddThread(&IdleTask,128,3);
+
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
+}
+
+void TestBad(void){
+	int i; char data;
+	printf("\n\rEE445M/EE380L, Lab 4 Bad test\n\r");
+	// simple test of eFile
+	if(eFile_Init())              diskError("eFile_Init",0);
+//	if(eFile_Format())            diskError("eFile_Format",0);
+
+	if(eFile_Create("bad1"))     diskError("eFile_Create",0);
+
+	if(eFile_WOpen("bad1"))      diskError("eFile_WOpen",0);
+	if(eFile_ROpen("bad1"))      diskError("eFile_ROpen",0);
+
+	if(eFile_Delete("bad1"))     diskError("eFile_Delete",0);
+	if(eFile_Close())             diskError("eFile_Close",0);
+	printf("Test Failed\n\r");
+	Running=0; // launch again
+	OS_Kill();
+}
+
+
+int mainbad(void){        // mainbad
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+  Running = 1;
+
+//*******attach background tasks***********
+  NumCreated = 0 ;
+// create initial foreground threads
+  NumCreated += OS_AddThread(&TestBad,128,1);
+  NumCreated += OS_AddThread(&interpreter,128,1);
   NumCreated += OS_AddThread(&IdleTask,128,3);
 
   OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here

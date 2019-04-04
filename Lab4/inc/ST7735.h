@@ -418,14 +418,17 @@ void ST7735_PlotNextErase(void);
 // Outputs: none
 void ST7735_OutChar(char ch);
 
-//********ST7735_OutString*****************
-// Print a string of characters to the ST7735 LCD.
-// Position determined by ST7735_SetCursor command
-// Color set by ST7735_SetTextColor
-// The string will not automatically wrap.
-// inputs: ptr  pointer to NULL-terminated ASCII string
-// outputs: none
-void ST7735_OutString(char *ptr);
+//------------ST7735_OutString------------
+// String draw function.
+// 16 rows (0 to 15) and 21 characters (0 to 20)
+// Requires (11 + size*size*6*8) bytes of transmission for each character
+// Input: x         columns from the left edge (0 to 20)
+//        y         rows from the top edge (0 to 15)
+//        pt        pointer to a null terminated string to be printed
+//        textColor 16-bit color of the characters
+// bgColor is Black and size is 1
+// Output: number of characters printed
+unsigned long ST7735_OutString(unsigned short x, unsigned short y, char *pt, short textColor);
 
 // ************** ST7735_SetTextColor ************************
 // Sets the color in which the characters will be printed
@@ -434,28 +437,6 @@ void ST7735_OutString(char *ptr);
 // Output: none
 // ********************************************************
 void ST7735_SetTextColor(uint16_t color);
-
-// *************** Output_Init ********************
-// Standard device driver initialization function for printf
-// Initialize ST7735 LCD
-// Inputs: none
-// Outputs: none
-void Output_Init(void);
-
-// Clear display
-void Output_Clear(void);
-
-// Turn off display (low power)
-void Output_Off(void);
-
-// Turn on display
-void Output_On(void);
-
-// set the color for future output
-// Background color is fixed at black
-// Input:  16-bit packed color
-// Output: none
-void Output_Color(uint32_t newColor);
 
 
 // ************** Self-created functions *************
@@ -472,7 +453,7 @@ void LCD_Init(void);
  *			value: the value to display following the string
  * output: none
  */
-void ST7735_Message (int device, int line, char *string, int32_t value);
+void ST7735_Message (unsigned long device, unsigned long line, char *string, long value);
 
 
 #endif

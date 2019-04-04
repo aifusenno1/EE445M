@@ -354,11 +354,11 @@ void printf (const char *format, ...) {
 			}
 		}
 		else {
-			if (*format == '\n') {
-				fputc(LF, &__stdout);
-				fputc(CR, &__stdout);
-			}
-			else
+//			if (*format == '\n') {
+//				fputc(LF, &__stdout);
+//				fputc(CR, &__stdout);
+//			}
+//			else
 				fputc(*format, &__stdout);
 		}
 		format++;

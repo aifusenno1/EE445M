@@ -605,8 +605,8 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 void print_jitter(void) {
 //	ST7735_Message(1,0,"Jitter 1 = ", maxJitter1);
 //	ST7735_Message(1,1,"Jitter 2 = ", maxJitter2);
-	printf("Periodic Task 1 jitter (0.1 us): %u\n", maxJitter1);
-	printf("Periodic Task 2 jitter (0.1 us): %u\n", maxJitter2);
+	printf("Periodic Task 1 jitter (0.1 us): %u\n\r", maxJitter1);
+	printf("Periodic Task 2 jitter (0.1 us): %u\n\r", maxJitter2);
 }
 
 void Timer1A_Handler(void){
