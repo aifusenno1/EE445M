@@ -325,11 +325,7 @@ void outUHex(uint32_t number){
 	}
 }
 
-/*
- * cannot use int printf (const  char *)
- * cannot include <stdio.h> header
- * because don't know how to resolve the problem
- */
+
 void printf (const char *format, ...) {
 	OS_bWait(&output_lock);
 	va_list ap;
@@ -358,6 +354,11 @@ void printf (const char *format, ...) {
 			}
 		}
 		else {
+//			if (*format == '\n') {
+//				fputc(LF, &__stdout);
+//				fputc(CR, &__stdout);
+//			}
+//			else
 				fputc(*format, &__stdout);
 		}
 		format++;
