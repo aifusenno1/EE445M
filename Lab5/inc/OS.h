@@ -54,12 +54,21 @@ typedef struct tcb {
 	struct tcb *next;	 // ** MUST be the second field
 	struct tcb *prev;
 	enum State state;
-	int id;
+	int tid;
 	uint32_t sleepTimeLeft;    // number of cycles left the thread needs to remain in sleep state
 	Sema4Type *blocked;        // the semaphore it is blocked on
 	int32_t priority;
 } tcbType;
 
+/*
+ * Process Control Block Structure
+ */
+typedef struct pcb {
+	int pid;
+	// code seg
+	// data seg
+	// threads
+} pcdType;
 
 extern tcbType *RunPt;
 
@@ -305,5 +314,7 @@ void OS_Launch(unsigned long theTimeSlice);
 // * Finds the next thread to run
 // */
 //void threadScheduler(void);
+
+int OS_AddProcess(void(*entry)(void), void *text, void *data, unsigned long stackSize, unsigned long priority);
 
 #endif /* INC_OS_H_ */

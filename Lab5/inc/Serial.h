@@ -27,8 +27,6 @@
 #ifndef SERIAL_H
 #define SERIAL_H
 
-#include "OS.h"
-#include <stdint.h>
 
 // U0Rx (VCP receive) connected to PA0
 // U0Tx (VCP transmit) connected to PA1
@@ -40,17 +38,6 @@
 #define ESC  0x1B
 #define SP   0x20
 #define DEL  0x7F
-
-
-enum {
-	UART_STREAM,
-	FILE_STREAM
-};
-
-
-extern int outstream;
-extern Sema4Type output_lock;
-
 
 //------------Serial_Init------------
 // Initialize the UART for 115,200 baud rate (assuming 50 MHz clock),
@@ -65,6 +52,17 @@ void Serial_Init(void);
 // Output: ASCII code for key typed
 char Serial_InChar(void);
 
+//------------Serial_OutChar------------
+// Output 8-bit to serial port
+// Input: letter is an 8-bit ASCII character to be transferred
+// Output: none
+void Serial_OutChar(char data);
+
+//------------Serial_OutString------------
+// Output String (NULL termination)
+// Input: pointer to a NULL-terminated string to be transferred
+// Output: none
+void Serial_OutString(char *pt);
 
 //------------Serial_InUDec------------
 // InUDec accepts ASCII input in unsigned decimal format
@@ -76,6 +74,12 @@ char Serial_InChar(void);
 // Backspace will remove last digit typed
 uint32_t Serial_InUDec(void);
 
+//-----------------------Serial_OutUDec-----------------------
+// Output a 32-bit number in unsigned decimal format
+// Input: 32-bit number to be transferred
+// Output: none
+// Variable format 1-10 digits with no space before or after
+void Serial_OutUDec(uint32_t n);
 
 //---------------------Serial_InUHex----------------------------------------
 // Accepts ASCII input in unsigned hexadecimal (base 16) format
@@ -89,6 +93,12 @@ uint32_t Serial_InUDec(void);
 // Backspace will remove last digit typed
 uint32_t Serial_InUHex(void);
 
+//---------------------Serial_OutUHex----------------------------
+// Output a 32-bit number in unsigned hexadecimal format
+// Input: 32-bit number to be transferred
+// Output: none
+// Variable format 1 to 8 digits with no space before or after
+void Serial_OutUHex(uint32_t number);
 
 //------------Serial_InString------------
 // Accepts ASCII characters from the serial port
@@ -104,8 +114,8 @@ uint32_t Serial_InUHex(void);
 // -- Modified by Agustinus Darmawan + Mingjie Qiu --
 void Serial_InString(char *bufPt, uint16_t max);
 
-void Serial_printf(const char *format, ...);
+void Serial_printf(char *format, ...);
 
-void printf (const char *format, ...);
+void Serial_println(char *format, ...);
 
 #endif

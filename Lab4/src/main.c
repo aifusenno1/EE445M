@@ -295,7 +295,7 @@ int realmain(void){        // lab 4 realmain
 //*******attach background tasks***********
   OS_AddSW1Task(&SW1Push,2);    // PF4, SW1
   OS_AddSW2Task(&SW2Push,3);   // PF0
-  OS_AddPeriodicThread(disk_timerproc,10*TIME_1MS,5);
+//  OS_AddPeriodicThread(disk_timerproc,10*TIME_1MS,5);
 
   NumCreated = 0 ;
 // create initial foreground threads
@@ -485,7 +485,7 @@ void SW1Push2(void){
 //******************* test main2 **********
 // SYSTICK interrupts, period established by OS_Launch
 // Timer interrupts, period established by first call to OS_AddPeriodicThread
-int main(void){        // testmain2
+int testmain2(void){        // testmain2
   OS_Init();           // initialize, disable interrupts
   PortD_Init();
   Running = 1;
@@ -533,6 +533,49 @@ int mainbad(void){        // mainbad
   NumCreated = 0 ;
 // create initial foreground threads
   NumCreated += OS_AddThread(&TestBad,128,1);
+  NumCreated += OS_AddThread(&interpreter,128,1);
+  NumCreated += OS_AddThread(&IdleTask,128,3);
+
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
+}
+
+
+void TestBand(void){
+	DSTATUS result;  unsigned short block;  int i; unsigned long n;
+	// simple test of eDisk
+	result = eDisk_Init(0);  // initialize disk
+	if(result) diskError("eDisk_Init",result);
+	printf("Writing blocks\n\r");
+	n = 1;    // seed
+	for(i=0;i<512;i++){
+		n = (16807*n)%2147483647; // pseudo random sequence
+		buffer[i] = 0xFF&n;
+	}
+	unsigned long startTime = OS_MsTime();
+	for(block = 0; block < MAXBLOCKS; block++){
+		if(eDisk_WriteBlock(buffer,block)) diskError("eDisk_WriteBlock",block); // save to disk
+	}
+	printf("%u ms\n\r", OS_MsTime() - startTime);
+	startTime = OS_MsTime();
+	for(block = 0; block < MAXBLOCKS; block++){
+		if(eDisk_ReadBlock(buffer, block)) diskError("eDisk_ReadBlock",block); // read from disk
+	}
+	printf("%u ms\n\r", OS_MsTime() - startTime);
+	Running=0; // launch again
+	OS_Kill();
+}
+
+
+int main(void){        // mainband
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+  Running = 1;
+
+//*******attach background tasks***********
+  NumCreated = 0 ;
+// create initial foreground threads
+  NumCreated += OS_AddThread(&TestBand,128,1);
   NumCreated += OS_AddThread(&interpreter,128,1);
   NumCreated += OS_AddThread(&IdleTask,128,3);
 

@@ -8,6 +8,8 @@
         .global  OS_EnableInterrupts
         .global  StartOS
         .global  SysTick_Handler
+        .global  SVC_Handler
+        .global  OS_Test
 
 .thumb_func
 OS_DisableInterrupts:  .func
@@ -26,10 +28,10 @@ SysTick_Handler:   .func       // 1) Saves R0-R3,R12,LR,PC,PSR
     CPSID   I                  // 2) Prevent interrupt during switch
     PUSH    {R4-R11}           // 3) Save remaining regs r4-11
 #ifdef DEBUG
-	PUSH    {R0,LR}
-	BL		LED_RED_TOGGLE
-	BL		LED_RED_TOGGLE
-	POP		{R0,LR}
+//	PUSH    {R0,LR}
+//	BL		LED_RED_TOGGLE
+//	BL		LED_RED_TOGGLE
+//	POP		{R0,LR}
 #endif
     LDR     R0, =RunPt          // 4) R0=pointer to RunPt, old thread
     LDR     R1, [R0]           //    R1 = RunPt
@@ -69,4 +71,28 @@ StartOS:	.func
     BX      LR                 // start first thread
 	.endfunc
 
-    .end
+.thumb_func
+OS_Test:
+	SVC		#0
+	BX		LR
+
+.thumb_func
+SVC_Handler:	.func			// Saves R0-R3,R12,LR,PC,PSR (top to bottom)
+	PUSH    {R0,LR}
+	BL		LED_RED_TOGGLE
+	POP		{R0,LR}
+	LDR  R12,[SP,#24]			// load PC to R12 (the instruction after SVC in user prog)
+	LDRH R12,[SP,#-2]			// load mem[PC-2] (the SVC instruction) to R12; SVC instruction is 2 byte
+	BIC  R12,#0xFF00			    // &~ clear top bits (extract only the SVC ID)
+	//LDM  SP,{R0-R3}				// load any parameters from stack into R0-R3 (auto increment SP?)
+
+
+
+	// figure out ID
+	// call corresponding OS_XXX
+
+	//STR R0,[SP]					// store R0 to mem[SP] ?
+	BX LR						// restore R0-R3,R12,LR,PC,PSR
+	.endfunc
+
+ .end

@@ -10,6 +10,7 @@
 #include "PLL.h"
 #include "Serial.h"
 #include "ST7735.h"
+#include "heap.h"
 
 #define PE0  (*((volatile unsigned long *)0x40024004))
 #define PE1  (*((volatile unsigned long *)0x40024008))
@@ -45,10 +46,10 @@ static void os_timer_init(void);
 void OS_Init(void){
   OS_DisableInterrupts();	  // disable all processor interrupt; will be enabled in OS_Launch
   PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
-  LED_Init();
   Serial_Init();
+  LED_Init();
   LCD_Init();
-
+  Heap_Init();
   os_timer_init();
 
   NVIC_ST_CTRL_R = 0;         // disable SysTick during setup
@@ -103,7 +104,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 	if (threadCnt == 0) {
 		tcbs[0].next = &tcbs[0];
 		tcbs[0].prev = &tcbs[0];
-		tcbs[0].id = nextID++;
+		tcbs[0].tid = nextID++;
 		tcbs[0].state = ACTIVE;
 		tcbs[0].priority = priority;
 		setInitialStack(0, task);
@@ -125,7 +126,7 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		lastThread = &tcbs[slot];
 
 		setInitialStack(slot, task);
-		tcbs[slot].id = nextID++;
+		tcbs[slot].tid = nextID++;
 		tcbs[slot].state = ACTIVE;
 		tcbs[slot].priority = priority;
 	}
@@ -156,10 +157,11 @@ void OS_Launch(uint32_t theTimeSlice){
 // Inputs: none
 // Outputs: Thread ID, number greater than zero
 unsigned long OS_Id(void) {
-	return RunPt->id;
+	return RunPt->tid;
 }
 
 // schedules the next thread to run
+// always selects the highest priority (including the current running thread), so may cause starvation
 void threadScheduler(void) {
 	tcbType * pt = RunPt;
 	tcbType * endPt;  // endPt is the last thread to check in the Linked List
@@ -236,8 +238,8 @@ void OS_Kill(void) {
 	RunPt->state = FREE;
 	RunPt->prev->next = RunPt->next;
 	RunPt->next->prev = RunPt->prev;
-	OS_EnableInterrupts();
 	threadCnt--;
+	OS_EnableInterrupts();
 	OS_Suspend();
 }
 
@@ -605,8 +607,8 @@ int OS_AddPeriodicThread(void(*task)(void), uint32_t period, uint32_t priority) 
 void print_jitter(void) {
 //	ST7735_Message(1,0,"Jitter 1 = ", maxJitter1);
 //	ST7735_Message(1,1,"Jitter 2 = ", maxJitter2);
-	printf("Periodic Task 1 jitter (0.1 us): %u\n\r", maxJitter1);
-	printf("Periodic Task 2 jitter (0.1 us): %u\n\r", maxJitter2);
+	Serial_println("Periodic Task 1 jitter (0.1 us): %u", maxJitter1);
+	Serial_println("Periodic Task 2 jitter (0.1 us): %u", maxJitter2);
 }
 
 void Timer1A_Handler(void){
@@ -805,3 +807,11 @@ void GPIOPortF_Handler(void) {  // negative logic
 	}
 	EndCritical(sr);
 }
+
+
+int OS_AddProcess(void(*entry)(void), void *text, void *data, unsigned long stackSize, unsigned long priority) {
+	int res = Heap_Free(data);
+	return res;
+}
+
+

@@ -433,6 +433,7 @@ static short _width = ST7735_TFTWIDTH;   // this could probably be a constant, e
 static short _height = ST7735_TFTHEIGHT;
 Sema4Type ssi_lock;
 
+
 // The Data/Command pin must be valid when the eighth bit is
 // sent.  The SSI module has hardware input and output FIFOs
 // that are 8 locations deep.  Based on the observation that

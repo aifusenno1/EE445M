@@ -19,9 +19,11 @@
 // ST7735.h
 // Runs on LM4F120/TM4C123
 // Low level drivers for the ST7735 160x128 LCD based off of
-// the file described above.
+// the file described above.  Further modified for simultaneous
+// use of the SD card (CS on PD7) and ST7735 LCD (CS on PA3).
 //    16-bit color, 128 wide by 160 high LCD
-// Daniel Valvano, March 30, 2015
+// Daniel Valvano
+// January 13, 2015
 // Augmented 7/17/2014 to have a simple graphics facility
 // Tested with LaunchPadDLL.dll simulator 9/2/2014
 
@@ -29,7 +31,7 @@
    "Embedded Systems: Real Time Interfacing to ARM Cortex M Microcontrollers",
    ISBN: 978-1463590154, Jonathan Valvano, copyright (c) 2014
 
- Copyright 2015 by Jonathan W. Valvano, valvano@mail.utexas.edu
+ Copyright 2014 by Jonathan W. Valvano, valvano@mail.utexas.edu
     You may use, edit, run or distribute this file
     as long as the above copyright notice remains
  THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
@@ -45,17 +47,17 @@
 // **********ST7735 TFT and SDC*******************
 // ST7735
 // Backlight (pin 10) connected to +3.3 V
-// MISO (pin 9) unconnected
+// MISO (pin 9) connected to PA4 (SSI0Rx)
 // SCK (pin 8) connected to PA2 (SSI0Clk)
 // MOSI (pin 7) connected to PA5 (SSI0Tx)
-// TFT_CS (pin 6) connected to PA3 (SSI0Fss)
-// CARD_CS (pin 5) unconnected
+// TFT_CS (pin 6) connected to PA3 (GPIO/SSI0Fss)
+// CARD_CS (pin 5) connected to PD7 (GPIO)
 // Data/Command (pin 4) connected to PA6 (GPIO), high for data, low for command
 // RESET (pin 3) connected to PA7 (GPIO)
 // VCC (pin 2) connected to +3.3 V
 // Gnd (pin 1) connected to ground
 
-// **********wide.hk ST7735R with ADXL345 accelerometer *******************
+// **********wide.hk ST7735R*******************
 // Silkscreen Label (SDC side up; LCD side down) - Connection
 // VCC  - +3.3 V
 // GND  - Ground
@@ -64,27 +66,11 @@
 // DC   - PA6 TFT data/command
 // RES  - PA7 TFT reset
 // CS   - PA3 TFT_CS, active low to enable TFT
-// *CS  - (NC) SDC_CS, active low to enable SDC
-// MISO - (NC) MISO SPI data from SDC to microcontroller
+// *CS  - PD7 SDC_CS, active low to enable SDC
+// MISO - PA4 MISO SPI data from SDC to microcontroller
 // SDA  � (NC) I2C data for ADXL345 accelerometer
 // SCL  � (NC) I2C clock for ADXL345 accelerometer
 // SDO  � (NC) I2C alternate address for ADXL345 accelerometer
-// Backlight + - Light, backlight connected to +3.3 V
-
-// **********wide.hk ST7735R with ADXL335 accelerometer *******************
-// Silkscreen Label (SDC side up; LCD side down) - Connection
-// VCC  - +3.3 V
-// GND  - Ground
-// !SCL - PA2 Sclk SPI clock from microcontroller to TFT or SDC
-// !SDA - PA5 MOSI SPI data from microcontroller to TFT or SDC
-// DC   - PA6 TFT data/command
-// RES  - PA7 TFT reset
-// CS   - PA3 TFT_CS, active low to enable TFT
-// *CS  - (NC) SDC_CS, active low to enable SDC
-// MISO - (NC) MISO SPI data from SDC to microcontroller
-// X� (NC) analog input X-axis from ADXL335 accelerometer
-// Y� (NC) analog input Y-axis from ADXL335 accelerometer
-// Z� (NC) analog input Z-axis from ADXL335 accelerometer
 // Backlight + - Light, backlight connected to +3.3 V
 
 #ifndef _ST7735H_
@@ -264,7 +250,7 @@ void ST7735_DrawChar(int16_t x, int16_t y, char c, int16_t textColor, int16_t bg
 //        textColor 16-bit color of the characters
 // bgColor is Black and size is 1
 // Output: number of characters printed
-uint32_t ST7735_DrawString(uint16_t x, uint16_t y, char *pt, int16_t textColor);
+uint32_t ST7735_DrawString(uint16_t x, uint16_t y, char *pt, int16_t textColor);;
 
 
 
@@ -418,17 +404,7 @@ void ST7735_PlotNextErase(void);
 // Outputs: none
 void ST7735_OutChar(char ch);
 
-//------------ST7735_OutString------------
-// String draw function.
-// 16 rows (0 to 15) and 21 characters (0 to 20)
-// Requires (11 + size*size*6*8) bytes of transmission for each character
-// Input: x         columns from the left edge (0 to 20)
-//        y         rows from the top edge (0 to 15)
-//        pt        pointer to a null terminated string to be printed
-//        textColor 16-bit color of the characters
-// bgColor is Black and size is 1
-// Output: number of characters printed
-unsigned long ST7735_OutString(unsigned short x, unsigned short y, char *pt, short textColor);
+
 
 // ************** ST7735_SetTextColor ************************
 // Sets the color in which the characters will be printed
@@ -438,12 +414,45 @@ unsigned long ST7735_OutString(unsigned short x, unsigned short y, char *pt, sho
 // ********************************************************
 void ST7735_SetTextColor(uint16_t color);
 
+// *************** Output_Init ********************
+// Standard device driver initialization function for printf
+// Initialize ST7735 LCD
+// Inputs: none
+// Outputs: none
+void Output_Init(void);
 
-// ************** Self-created functions *************
+// Clear display
+void Output_Clear(void);
+
+// Turn off display (low power)
+void Output_Off(void);
+
+// Turn on display
+void Output_On(void);
+
+// set the color for future output
+// Background color is fixed at black
+// Input:  16-bit packed color
+// Output: none
+void Output_Color(uint32_t newColor);
+
+
+
+// ************** Public functions *************
 /*
  * Initialization of LCD
  */
 void LCD_Init(void);
+
+//********ST7735_OutString*****************
+// Print a string of characters to the ST7735 LCD.
+// Position determined by ST7735_SetCursor command
+// Color set by ST7735_SetTextColor
+// The string will not automatically wrap.
+// inputs: ptr  pointer to NULL-terminated ASCII string
+// outputs: none
+void ST7735_OutString(char *ptr);
+
 /*
  * Divide the LCD into two logical partitions and provide
  * an interface to output a string and an integer

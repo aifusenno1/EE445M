@@ -786,7 +786,7 @@ void GPIOPortF_Handler(void) {  // negative logic
 			sw1_task();
 		}
 		// debounce required on both press and release
-		int ret = OS_AddThread(sw1_debounce, 128, sw1_pri);  // for debounce purpose, priority for switch tasks need to be high
+		int ret = OS_AddThread(sw1_debounce, 128, 1);  // for debounce purpose, priority for switch tasks need to be high
 		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
 			GPIO_PORTF_ICR_R = 0x10;
 			GPIO_PORTF_IM_R |= 0x10;
@@ -797,7 +797,7 @@ void GPIOPortF_Handler(void) {  // negative logic
 		if (lastPF0) {
 			sw2_task();
 		}
-		int ret = OS_AddThread(sw2_debounce, 128, sw2_pri);  // for debounce purpose, priority for switch tasks need to be high
+		int ret = OS_AddThread(sw2_debounce, 128, 1);  // for debounce purpose, priority for switch tasks need to be high
 		if (ret == 0) {  // failed, arm right away			 // so that it can be scheduled right away
 			GPIO_PORTF_ICR_R = 0x01;
 			GPIO_PORTF_IM_R |= 0x01;
