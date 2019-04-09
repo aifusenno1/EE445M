@@ -58,40 +58,57 @@ SysTick_Handler:   .func       // 1) Saves R0-R3,R12,LR,PC,PSR
 // a "fake" stack must have been created for all initially existing threads
 .thumb_func
 StartOS:	.func
-    LDR     R0, =RunPt      // the next thread to be run
+    BL		threadScheduler	   // update RunPt and pcbPt; do not need to save LR, will be overwritten anyways
+    LDR     R0, =RunPt
     LDR     R2, [R0]           // R2 = value of RunPt
-    LDR     SP, [R2]           // new thread SP; SP = RunPt->stackPointer;
+    LDR     SP, [R2]           // new thread SP; SP = RunPt->sp;
     POP     {R4-R11}           // restore regs r4-11; the pop order just complies the way they are stored in stack
     POP     {R0-R3}            // restore regs r0-3
     POP     {R12}
     ADD     SP, SP, #4         // discard LR from initial stack;
-    POP     {LR}               // start location (pop the PC, loaded into LR, so this procedure returns to the next thread)
+    POP     {LR}               // start location (pop the PC, loaded into LR, so this procedure returns scheduled thread)
     ADD     SP, SP, #4         // discard PSR;
     CPSIE   I                  // Enable interrupts at processor level
     BX      LR                 // start first thread
 	.endfunc
 
 .thumb_func
-OS_Test:
-	SVC		#0
-	BX		LR
-
-.thumb_func
 SVC_Handler:	.func			// Saves R0-R3,R12,LR,PC,PSR (top to bottom)
 	PUSH    {R0,LR}
 	BL		LED_RED_TOGGLE
+	BL		LED_RED_TOGGLE
 	POP		{R0,LR}
 	LDR  R12,[SP,#24]			// load PC to R12 (the instruction after SVC in user prog)
-	LDRH R12,[SP,#-2]			// load mem[PC-2] (the SVC instruction) to R12; SVC instruction is 2 byte
+	LDRH R12,[R12,#-2]			// load mem[PC-2] (the SVC instruction) to R12; SVC instruction is 2 byte
 	BIC  R12,#0xFF00			    // &~ clear top bits (extract only the SVC ID)
-	//LDM  SP,{R0-R3}				// load any parameters from stack into R0-R3 (auto increment SP?)
+	LDM  SP,{R0-R3}				// load any parameters from stack into R0-R3 (auto increment SP?)
 
-
-
-	// figure out ID
 	// call corresponding OS_XXX
+	PUSH    {R4,LR}				// cannot use R0 here, cuz R0 used as return val
+	CMP  R12, #0
+	BEQ  JOS_Id
+	CMP  R12, #1
+	BEQ  JOS_Kill
+	CMP  R12, #2
+	BEQ  JOS_Sleep
+	CMP  R12, #3
+	BEQ  JOS_Time
+	CMP  R12, #4
+	BEQ  JOS_AddThread
 
-	//STR R0,[SP]					// store R0 to mem[SP] ?
+JOS_Id:		BL	OS_Id
+			B   done
+JOS_Kill:	BL  OS_Kill
+			B   done
+JOS_Sleep:	BL  OS_Sleep
+			B   done
+JOS_Time:	BL  OS_Time
+			B   done
+JOS_AddThread:	BL  OS_AddThread
+				B   done
+done:
+	POP	 {R4,LR}
+	STR R0,[SP]					// store return value
 	BX LR						// restore R0-R3,R12,LR,PC,PSR
 	.endfunc
 

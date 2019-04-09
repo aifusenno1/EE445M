@@ -19,7 +19,7 @@
 #define TIME_500US  (TIME_1MS/2)
 #define TIME_250US  (TIME_1MS/5)
 
-#define NUMTHREADS  10        // maximum number of threads
+#define NUMTHREADS  15        // maximum number of threads
 
 #define FS 400              // producer/consumer sampling
 #define RUNLENGTH (20*FS)   // display results and quit when NumSamples==RUNLENGTH
@@ -46,6 +46,8 @@ typedef struct Sema4{
   int end;					 	 // the end index of waiters
 } Sema4Type;
 
+typedef struct pcb pcbType;
+
 /*
  *	Thread Control Block structure
  */
@@ -58,19 +60,20 @@ typedef struct tcb {
 	uint32_t sleepTimeLeft;    // number of cycles left the thread needs to remain in sleep state
 	Sema4Type *blocked;        // the semaphore it is blocked on
 	int32_t priority;
+	pcbType *pcb;
 } tcbType;
 
 /*
  * Process Control Block Structure
  */
-typedef struct pcb {
+struct pcb {
 	int pid;
-	// code seg
-	// data seg
-	// threads
-} pcdType;
+	void *text;
+	void *data;
+	int threadNum;
+};
 
-extern tcbType *RunPt;
+//extern tcbType *RunPt;
 
 
 // ******** OS_Init ************
@@ -118,13 +121,11 @@ void OS_bSignal(Sema4Type *semaPt);
 
 //******** OS_AddThread ***************
 // add a foregound thread to the scheduler
-// Inputs: pointer to a void/void foreground task
+// Inputs: pointer to a void-void foreground task
 //         number of bytes allocated for its stack
 //         priority, 0 is highest, 5 is the lowest
 // Outputs: 1 if successful, 0 if this thread can not be added
 // stack size must be divisable by 8 (aligned to double word boundary)
-// In Lab 2, you can ignore both the stackSize and priority fields
-// In Lab 3, you can ignore the stackSize fields
 int OS_AddThread(void(*task)(void),
    unsigned long stackSize, unsigned long priority);
 
@@ -308,12 +309,6 @@ unsigned long OS_MsTime(void);
 // In Lab 3, you should implement the user-defined TimeSlice field
 // It is ok to limit the range of theTimeSlice to match the 24-bit SysTick
 void OS_Launch(unsigned long theTimeSlice);
-
-///*
-// * Thread Scheduler
-// * Finds the next thread to run
-// */
-//void threadScheduler(void);
 
 int OS_AddProcess(void(*entry)(void), void *text, void *data, unsigned long stackSize, unsigned long priority);
 

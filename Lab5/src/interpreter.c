@@ -36,7 +36,6 @@ static const ELFEnv_t env = { exports, sizeof(exports) / sizeof(*exports) };
 void interpreter(void) {
 	while (1) {
 		Serial_printf("$ ");
-
 		Serial_InString(input, 30);  // 200 will not work for some reason
 
 		Serial_printf("\n\r");
@@ -97,21 +96,21 @@ void interpreter(void) {
 		}
 
 //		display directory
-		else if (strcmp(command[0], "ls") == 0) {
-			parse_ls(command, len);
-		}
+//		else if (strcmp(command[0], "ls") == 0) {
+//			parse_ls(command, len);
+//		}
 
-		else if (strcmp(command[0], "format") == 0) {
-			parse_format(command, len);
-		}
+//		else if (strcmp(command[0], "format") == 0) {
+//			parse_format(command, len);
+//		}
 
 		else if (strcmp(command[0], "cat") == 0) {
 			parse_cat(command, len);
 		}
 
-		else if (strcmp(command[0], "rm") == 0) {
-			parse_rm(command,  len);
-		}
+//		else if (strcmp(command[0], "rm") == 0) {
+//			parse_rm(command,  len);
+//		}
 
 		else if (strcmp(command[0], "malloc") == 0) {
 			parse_malloc(command,  len);
@@ -206,15 +205,15 @@ static void parse_jitter(char cmd[][20], int len) {
 }
 
 
-static void parse_ls(char cmd[][20], int len) {
+//static void parse_ls(char cmd[][20], int len) {
+//
+//}
 
-}
-
-static void parse_format(char cmd[][20], int len) {
+//static void parse_format(char cmd[][20], int len) {
 //	if (eFile_Format()) {
 //		printf("format: failed.\n\r");
 //	}
-}
+//}
 
 static void parse_cat(char cmd[][20], int len) {
 	if (len == 1) {
@@ -247,17 +246,17 @@ static void parse_cat(char cmd[][20], int len) {
 
 }
 
-static void parse_rm(char cmd[][20], int len) {
-	if (len == 1) {
+//static void parse_rm(char cmd[][20], int len) {
+//	if (len == 1) {
 //		Serial_printf("rm: no file name.\n\r");
-		return;
-	}
-
+//		return;
+//	}
+//
 //	if (eFile_Delete(cmd[1])) {
 //		Serial_printf("rm: delete failed.\n\r");
 //		return;
 //	}
-}
+//}
 
 static void parse_malloc(char cmd[][20], int len) {
 	if (len == 1) {
@@ -287,13 +286,17 @@ static void parse_free(char cmd[][20], int len) {
 
 static void parse_load(char cmd[][20], int len) {
 	if (len < 2) {
-			Serial_printf("load: missing argument.\n\r");
-			return;
-		}
-
-	  if (exec_elf(cmd[1], &env)) {
-		  Serial_printf("load: exec_elf error.\n\r");
-	  }
+		Serial_printf("load: missing argument.\n\r");
+		return;
+	}
+	//	unsigned long startTime = OS_Time();
+	uint32_t startTime = OS_MsTime();
+	if (exec_elf(cmd[1], &env) != 1) {
+		Serial_printf("load: exec_elf error.\n\r");
+	}
+	//	  unsigned long t = OS_TimeDifference(startTime, OS_Time());
+	uint32_t t = OS_MsTime() - startTime;
+	Serial_printf("load: process creation time is %u ms\r\n", t);
 }
 
 void parse_dg(char cmd[][20], int len) {

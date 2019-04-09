@@ -78,6 +78,7 @@
 #include "ST7735.h"
 #include "LED.h"
 #include "OS.h"
+#include "Serial.h"
 
 // 16 rows (0 to 15) and 21 characters (0 to 20)
 // Requires (11 + size*size*6*8) bytes of transmission for each character
@@ -1602,6 +1603,26 @@ void Output_Color(uint32_t newColor){ // Set color of future output
   ST7735_SetTextColor(newColor);
 }
 
+static void ST7735_OutString2(char *ptr){
+	while(*ptr){
+		ST7735_OutChar(*ptr);
+		ptr = ptr + 1;
+	}
+}
+
+static void ST7735_OutUDec2(uint32_t n){
+  Messageindex = 0;
+  fillmessage(n);
+  Message[Messageindex] = 0; // terminate
+  ST7735_DrawString(StX,StY,Message,StTextColor);
+  StX = StX+Messageindex;
+  if(StX>20){
+    StX = 20;
+    ST7735_DrawCharS(StX*6,StY*10,'*',ST7735_RED,ST7735_BLACK, 1);
+  }
+}
+
+
 // ************** functions with semaphore *************
 Sema4Type ssi_lock;
 
@@ -1641,7 +1662,6 @@ void ST7735_OutString(char *ptr){
 
 void ST7735_Message (unsigned long device, unsigned long line, char *string, long value) {
 	OS_bWait(&ssi_lock);
-
 	int y = 1;
 	switch (device) {
 	case (0) :  // row 0 - 7
@@ -1669,7 +1689,9 @@ void ST7735_Message (unsigned long device, unsigned long line, char *string, lon
 	break;
 	default	 :;
 	}
-	ST7735_DrawString(0, y, string, ST7735_YELLOW);
-	ST7735_OutUDec(value);
+	ST7735_SetCursor(0, y);
+	ST7735_OutString2(string);
+//	ST7735_DrawString(0, y, string, ST7735_YELLOW);
+	ST7735_OutUDec2(value);
 	OS_bSignal(&ssi_lock);
 }

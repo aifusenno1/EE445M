@@ -76,6 +76,8 @@ unsigned char buffer[512];
 #define MAXBLOCKS 100
 
 void filesystem(void) {
+//	ST7735_Message(1,0, "File ID: ", OS_Id());
+
 	UINT successfulreads, successfulwrites;
 	uint8_t c, x, y;
 	MountFresult = f_mount(&g_sFatFs, "", 0);
@@ -88,8 +90,7 @@ void filesystem(void) {
 void OS_Test(void);
 
 void button(void) {
-	OS_Test();
-	OS_Kill();
+
 }
 
 //************SW1Push*************
@@ -103,12 +104,12 @@ void SW1Push(void){
 // Called when SW2 Button pushed
 // background threads execute once and return
 void SW2Push(void){
+	LED_GREEN_TOGGLE();
 }
 
 
 int main(void){        // realmain
   OS_Init();           // initialize, disable interrupts
-  PortE_Init();
 
   //*******attach background tasks***********
   OS_AddSW1Task(&SW1Push,2);    // PF4, SW1
@@ -116,9 +117,12 @@ int main(void){        // realmain
 
   NumCreated = 0 ;
 // create initial foreground threads
-  NumCreated += OS_AddThread(&filesystem,128,1);
-  NumCreated += OS_AddThread(&interpreter,128,2);
-  NumCreated += OS_AddThread(&IdleTask,128,7);  // runs when nothing useful to do
+  OS_AddProcess(&interpreter, 0, 0, 128, 2);
+  OS_AddProcess(&filesystem, 0, 0, 128, 1);
+  OS_AddProcess(&IdleTask, 0, 0, 128, 7);
+//  NumCreated += OS_AddThread(&filesystem,128,1);
+//  NumCreated += OS_AddThread(&interpreter,128,2);
+//  NumCreated += OS_AddThread(&IdleTask,128,7);  // runs when nothing useful to do
 
   OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
   return 0;            // this never executes

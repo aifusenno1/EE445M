@@ -23,17 +23,17 @@
 #define TIME_250US  (TIME_1MS/5)
 #define OS_PERIOD   TIME_1MS  // period of OS_Timer, in unit of 12.5ns (cycles)
 
-#define STACKSIZE   500      // number of 32-bit words in stack
+#define STACKSIZE   200      // number of 32-bit words in stack
 
 static unsigned long OS_Timer;	   // in unit of 1ms by default
 
-int32_t Stacks[NUMTHREADS][STACKSIZE];
-tcbType *RunPt;
 static tcbType tcbs[NUMTHREADS];
+static int32_t Stacks[NUMTHREADS][STACKSIZE];
+tcbType *RunPt;	  // current running thread
+pcbType *pcbPt;   // current running process
 static uint32_t threadCnt;
-static int nextID = 0;
 static tcbType *lastThread;
-
+void * dataPt;      // record the data section pointer for the current running process (in case a addThread (initStack) is called, need to load into R9)
 void StartOS(void);
 static void os_timer_init(void);
 
@@ -46,8 +46,9 @@ static void os_timer_init(void);
 void OS_Init(void){
   OS_DisableInterrupts();	  // disable all processor interrupt; will be enabled in OS_Launch
   PLL_Init(Bus80MHz);         // set processor clock to 80 MHz
-  Serial_Init();
   LED_Init();
+  Serial_Init();
+
   LCD_Init();
   Heap_Init();
   os_timer_init();
@@ -70,7 +71,7 @@ static void setInitialStack(int i, void (*thread_starting_addr)(void)){
   Stacks[i][STACKSIZE-8] = 0x00000000;   // R0
   Stacks[i][STACKSIZE-9] = 0x11111111;   // R11
   Stacks[i][STACKSIZE-10] = 0x10101010;  // R10
-  Stacks[i][STACKSIZE-11] = 0x09090909;  // R9
+  Stacks[i][STACKSIZE-11] = (int32_t) dataPt;  // R9
   Stacks[i][STACKSIZE-12] = 0x08080808;  // R8
   Stacks[i][STACKSIZE-13] = 0x07070707;  // R7
   Stacks[i][STACKSIZE-14] = 0x06060606;  // R6
@@ -88,6 +89,15 @@ static int findFreeThreadSlot(void) {
 	}
 	return -1;
 }
+
+static void killProcess(pcbType *pcb) {
+	OS_EnableInterrupts();        // better to add this otherwise semaphore inside serial port may cause trouble
+	Serial_println("pid %u freed", pcb->pid);
+	Heap_Free(pcb->text);
+	Heap_Free(pcb->data);
+	Heap_Free(pcb);
+	OS_DisableInterrupts();
+}
 //******** OS_AddThread ***************
 // add a foregound thread to the scheduler
 // Inputs: pointer to a void-void foreground task
@@ -95,13 +105,12 @@ static int findFreeThreadSlot(void) {
 //         priority, 0 is highest, 5 is the lowest
 // Outputs: 1 if successful, 0 if this thread can not be added
 // stack size must be divisable by 8 (aligned to double word boundary)
-// In Lab 2, you can ignore both the stackSize and priority fields
-// In Lab 3, you can ignore the stackSize fields
 int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long priority) {
+	static int nextID = 0;
 	int32_t sr;
 	sr = StartCritical();
-
-	if (threadCnt == 0) {
+	int slot = findFreeThreadSlot();
+	if (slot == 0) {
 		tcbs[0].next = &tcbs[0];
 		tcbs[0].prev = &tcbs[0];
 		tcbs[0].tid = nextID++;
@@ -109,15 +118,13 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		tcbs[0].priority = priority;
 		setInitialStack(0, task);
 		lastThread = &tcbs[0];
-		RunPt = &tcbs[0];
+		tcbs[0].pcb = pcbPt;
+	}
+	else if (slot == -1)  {
+		EndCritical(sr);
+		return 0;
 	}
 	else {
-		int slot = findFreeThreadSlot();
-		if (slot == -1)  {
-			EndCritical(sr);
-			return 0;
-		}
-
 		// keeping both next and prev helps relinking when a thread dies
 		tcbs[slot].next = lastThread->next;
 		tcbs[slot].prev = lastThread;
@@ -129,10 +136,47 @@ int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long prior
 		tcbs[slot].tid = nextID++;
 		tcbs[slot].state = ACTIVE;
 		tcbs[slot].priority = priority;
+		tcbs[slot].pcb = pcbPt;
 	}
-//	Serial_println("%u", threadCnt);
 	threadCnt++;
+	pcbPt->threadNum++;
+	EndCritical(sr);
+	return 1;
+}
 
+
+/*
+ * Output: return 0 if successful, else return -1
+ */
+int OS_AddProcess(void(*entry)(void), void *text, void *data, unsigned long stackSize, unsigned long priority) {
+	static uint32_t nextID = 0;
+	unsigned long sr = StartCritical();
+	pcbType *newPcb = Heap_Malloc(sizeof(pcbType));
+	if (!newPcb) {
+		EndCritical(sr);
+		return 0;
+	}
+
+	newPcb->pid = nextID;
+	if (text) newPcb->text = text;  		// for OS created processes that do not have text and data on heap
+	else newPcb->text = Heap_Malloc(4);
+	if (data) newPcb->data = data;
+	else newPcb->data = Heap_Malloc(4);
+
+	newPcb->threadNum = 0;
+	dataPt = newPcb->data;
+	pcbType *temp = pcbPt;  // when adding new process, the thread needs to be added to the new process not current running process
+	pcbPt = newPcb;			// therefore create a temporary pcb to store the current running process
+	int in = OS_AddThread(entry, stackSize, priority);  // what's the priority here?
+	if (!in) {
+		killProcess(pcbPt);
+		pcbPt = temp;
+		EndCritical(sr);
+		return 0;
+	}
+
+	pcbPt = temp;
+	nextID++;
 	EndCritical(sr);
 	return 1;
 }
@@ -163,6 +207,10 @@ unsigned long OS_Id(void) {
 // schedules the next thread to run
 // always selects the highest priority (including the current running thread), so may cause starvation
 void threadScheduler(void) {
+	// deal with initial launch
+	if (RunPt == 0) {
+		RunPt = &tcbs[0];
+	}
 	tcbType * pt = RunPt;
 	tcbType * endPt;  // endPt is the last thread to check in the Linked List
 	// whether this thread is killed
@@ -183,10 +231,8 @@ void threadScheduler(void) {
 		}
 	} while (pt != endPt);
 	RunPt = bestPt;
-
-#ifdef DEBUG
-//	LED_BLUE_TOGGLE();
-#endif
+	pcbPt = bestPt->pcb;  // update the current running process
+	dataPt = bestPt->pcb->data;  // update data section pointer
 }
 
 // ******** OS_Sleep ************
@@ -226,6 +272,8 @@ void OS_Sleep(unsigned long sleepTime) {
 	OS_Suspend();
 }
 
+
+
 // ******** OS_Kill ************
 // kill the currently running thread, release its TCB and stack
 // input:  none
@@ -239,6 +287,11 @@ void OS_Kill(void) {
 	RunPt->prev->next = RunPt->next;
 	RunPt->next->prev = RunPt->prev;
 	threadCnt--;
+	// free process if all threads are killed
+	if (--RunPt->pcb->threadNum == 0) {
+		killProcess(RunPt->pcb);
+	}
+
 	OS_EnableInterrupts();
 	OS_Suspend();
 }
@@ -807,11 +860,4 @@ void GPIOPortF_Handler(void) {  // negative logic
 	}
 	EndCritical(sr);
 }
-
-
-int OS_AddProcess(void(*entry)(void), void *text, void *data, unsigned long stackSize, unsigned long priority) {
-	int res = Heap_Free(data);
-	return res;
-}
-
 

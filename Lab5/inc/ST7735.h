@@ -263,15 +263,6 @@ uint32_t ST7735_DrawString(uint16_t x, uint16_t y, char *pt, int16_t textColor);
 // outputs: none
 void ST7735_SetCursor(uint32_t newX, uint32_t newY);
 
-//-----------------------ST7735_OutUDec-----------------------
-// Output a 32-bit number in unsigned decimal format
-// Position determined by ST7735_SetCursor command
-// Color set by ST7735_SetTextColor
-// Input: 32-bit number to be transferred
-// Output: none
-// Variable format 1-10 digits with no space before or after
-void ST7735_OutUDec(uint32_t n);
-
 
 //------------ST7735_SetRotation------------
 // Change the image rotation.
@@ -452,6 +443,15 @@ void LCD_Init(void);
 // inputs: ptr  pointer to NULL-terminated ASCII string
 // outputs: none
 void ST7735_OutString(char *ptr);
+
+//-----------------------ST7735_OutUDec-----------------------
+// Output a 32-bit number in unsigned decimal format
+// Position determined by ST7735_SetCursor command
+// Color set by ST7735_SetTextColor
+// Input: 32-bit number to be transferred
+// Output: none
+// Variable format 1-10 digits with no space before or after
+void ST7735_OutUDec(uint32_t n);
 
 /*
  * Divide the LCD into two logical partitions and provide

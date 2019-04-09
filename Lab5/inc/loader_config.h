@@ -79,7 +79,8 @@ void LOADER_CLEAR(void* ptr, size_t size) { int i; int32_t *p;
 
 #define LOADER_JUMP_TO(entry, text, data) OS_AddProcess(entry, text, data, 128, 1)
 
-#define DBG(...) Serial_printf( __VA_ARGS__)
+#define DBG(...)
+//#define DBG(...) Serial_printf( __VA_ARGS__)
 #define ERR(msg) Serial_printf("ELF: " msg "\n\r")
 #define MSG(msg) Serial_printf("ELF: " msg "\n\r")
 

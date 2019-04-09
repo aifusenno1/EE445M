@@ -12,6 +12,7 @@
 unsigned long volatile TxPutI;// put next
 unsigned long volatile TxGetI;// get next
 txDataType static TxFifo[TXFIFOSIZE];
+static Sema4Type TxRoomLeft;
 
 // initialize index FIFO
 void TxFifo_Init(void){ long sr;
@@ -22,14 +23,14 @@ void TxFifo_Init(void){ long sr;
 // add element to end of index FIFO
 // return TXFIFOSUCCESS if successful
 int TxFifo_Put(txDataType data){
-  OS_DisableInterrupts();
+//  OS_DisableInterrupts();
   if((TxPutI-TxGetI) & ~(TXFIFOSIZE-1)){
-	OS_EnableInterrupts();
+//	OS_EnableInterrupts();
     return(TXFIFOFAIL); // Failed, fifo full
   }
   TxFifo[TxPutI&(TXFIFOSIZE-1)] = data; // put
   TxPutI++;  // Success, update
-  OS_EnableInterrupts();
+//  OS_EnableInterrupts();
   return(TXFIFOSUCCESS);
 }
 // remove element from front of index FIFO
@@ -57,11 +58,13 @@ unsigned short TxFifo_Size(void){
 rxDataType volatile *RxPutPt; // put next
 rxDataType volatile *RxGetPt; // get next
 rxDataType static RxFifo[RXFIFOSIZE];
+static Sema4Type RxDataAva;
 
 // initialize pointer FIFO
 void RxFifo_Init(void){ long sr;
   sr = StartCritical();      // make atomic
   RxPutPt = RxGetPt = &RxFifo[0]; // Empty
+  OS_InitSemaphore(&RxDataAva, 0);
   EndCritical(sr);
 }
 // add element to end of pointer FIFO
@@ -73,18 +76,20 @@ int RxFifo_Put(rxDataType data){
     nextPutPt = &RxFifo[0];  // wrap
   }
   if(nextPutPt == RxGetPt){
-    return(RXFIFOFAIL);      // Failed, fifo full
+    return(RXFIFOFAIL);       // Failed, fifo full; Since cannot wait here (in ISR)
   }
   else{
     *(RxPutPt) = data;       // Put
     RxPutPt = nextPutPt;     // Success, update
+//    OS_Signal(&RxDataAva);
     return(RXFIFOSUCCESS);
   }
 }
 // remove element from front of pointer FIFO
 // return RXFIFOSUCCESS if successful
 int RxFifo_Get(rxDataType *datapt){
-  if(RxPutPt == RxGetPt ){
+//	OS_Wait(&RxDataAva);
+  if(RxPutPt == RxGetPt){
     return(RXFIFOFAIL);      // Empty if PutPt=GetPt
   }
   *datapt = *(RxGetPt++);
