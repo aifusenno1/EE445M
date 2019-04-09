@@ -293,6 +293,7 @@ static void parse_load(char cmd[][20], int len) {
 	uint32_t startTime = OS_MsTime();
 	if (exec_elf(cmd[1], &env) != 1) {
 		Serial_printf("load: exec_elf error.\n\r");
+		return;
 	}
 	//	  unsigned long t = OS_TimeDifference(startTime, OS_Time());
 	uint32_t t = OS_MsTime() - startTime;

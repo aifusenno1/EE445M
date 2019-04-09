@@ -23,7 +23,7 @@
 #define TIME_250US  (TIME_1MS/5)
 #define OS_PERIOD   TIME_1MS  // period of OS_Timer, in unit of 12.5ns (cycles)
 
-#define STACKSIZE   200      // number of 32-bit words in stack
+#define STACKSIZE   400      // number of 32-bit words in stack
 
 static unsigned long OS_Timer;	   // in unit of 1ms by default
 
