@@ -100,7 +100,9 @@ void static copySoftwareToHardware(void){
 // spin if RxFifo is empty
 char Serial_InChar(void){
   char letter;
-  while(RxFifo_Get(&letter) == FIFOFAIL) {}
+  while(RxFifo_Get(&letter) == FIFOFAIL) {
+	    OS_Sleep(100);    // temporarily switch out
+  }
   return(letter);
 }
 // output ASCII character to UART

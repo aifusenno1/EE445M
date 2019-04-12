@@ -74,10 +74,9 @@ StartOS:	.func
 
 .thumb_func
 SVC_Handler:	.func			// Saves R0-R3,R12,LR,PC,PSR (top to bottom)
-	PUSH    {R0,LR}
-	BL		LED_RED_TOGGLE
-	BL		LED_RED_TOGGLE
-	POP		{R0,LR}
+//	PUSH    {R4,LR}
+//	BL		LED_RED_TOGGLE
+//	POP		{R4,LR}
 	LDR  R12,[SP,#24]			// load PC to R12 (the instruction after SVC in user prog)
 	LDRH R12,[R12,#-2]			// load mem[PC-2] (the SVC instruction) to R12; SVC instruction is 2 byte
 	BIC  R12,#0xFF00			    // &~ clear top bits (extract only the SVC ID)
@@ -109,6 +108,9 @@ JOS_AddThread:	BL  OS_AddThread
 done:
 	POP	 {R4,LR}
 	STR R0,[SP]					// store return value
+//	PUSH    {R4,LR}
+//	BL		LED_RED_TOGGLE
+//	POP		{R4,LR}
 	BX LR						// restore R0-R3,R12,LR,PC,PSR
 	.endfunc
 

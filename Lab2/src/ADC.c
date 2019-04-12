@@ -99,7 +99,7 @@ void WaitForInterrupt(void);  // low power mode
 
 
 /*
- * Open ADC0SS3 to collect 1 piece of data
+ * Open ADC0SS3
  * ADC0
  * SS3
  * Software triggered
@@ -229,9 +229,9 @@ void ADC_Init(uint32_t channelNum) {
 }
 
 /*
- * read the previously recorded ADC value
+ * read ADC value
  * input:  none
- * output: the previously read ADC value
+ * output: the ADC value
  */
 uint16_t ADC_In(void) {
 	ADC0_PSSI_R = 0x08;		// initiate conversion on SS3
@@ -243,15 +243,12 @@ uint16_t ADC_In(void) {
 
 static void (*ADC_task) (uint32_t data);
 /*
- * Open ADC0SS3 with the specified channelNum at interrupting frequency fs, take numberOfSamples of samples,
- * store them in buffer, then disable the interrupt
  * ADC0
  * SS2
  * Timer2A triggered
  * inputs:  channelNum: the channel number to open
  * 			fs: the interrupting frequency
- * 			buffer: pointer to the array that stores data
- * 			numberOfSamples: number of samples to collect
+ * 			task: the task to run
  */
 void ADC_Collect(uint32_t channelNum, uint32_t fs, void (*task)(uint32_t)) {
 	volatile uint32_t delay;

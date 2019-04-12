@@ -37,6 +37,8 @@
 #define PE2  (*((volatile unsigned long *)0x40024010))
 #define PE3  (*((volatile unsigned long *)0x40024020))
 
+void WaitForInterrupt(void);
+
 uint32_t NumCreated;
 
 void PortE_Init(void){
@@ -58,8 +60,9 @@ void PortE_Init(void){
 unsigned long Idlecount=0;
 void IdleTask(void){
   while(1) {
-	PE0 ^= 0x01;
-    Idlecount++;        // debugging
+//	LED_GREEN_TOGGLE();
+//    Idlecount++;        // debugging
+	WaitForInterrupt();
   }
 }
 
@@ -104,7 +107,6 @@ void SW1Push(void){
 // Called when SW2 Button pushed
 // background threads execute once and return
 void SW2Push(void){
-	LED_GREEN_TOGGLE();
 }
 
 
